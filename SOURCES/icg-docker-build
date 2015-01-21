@@ -27,6 +27,9 @@
 #                                        when run from bamboo.
 # 20150120     Jason W. Plummer          Added support to echo remote registry
 #                                        operations into build log
+# 20150121     Jason W. Plummer          Added --registry_namespace to allow
+#                                        docker_namespace override when tagging
+#                                        and pushing to a registry server
 
 ################################################################################
 # DESCRIPTION
@@ -295,7 +298,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         case "${1}" in
 
-            --docker_registry|--docker_namespace|--docker_build_args|--git_branch|--stash_project|--personal_stash_project)
+            --docker_registry|--docker_namespace|--docker_build_args|--git_branch|--stash_project|--personal_stash_project|--registry_namespace)
                 key=`echo "${1}" | ${my_sed} -e 's/^--//g'`
                 eval ${key}="${2}"
                 shift
@@ -321,7 +324,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         # Make sure namespace is sane
         let ns_check=`echo "${docker_namespace}" | ${my_egrep} -c "[^a-zA-Z0-9]"`
-        let ns_length=`echo -ne "${docker_namespace}" | ${my_wc} -c`
+        let ns_length=`echo -ne "${docker_namespace}" | ${my_wc} -c | ${my_awk} '{print $1}'`
 
         if [ ${ns_check} -gt 0 ]; then
             echo "${STDOUT_OFFSET}ERROR:  Invalid characters detected in namespace \"${docker_namespace}\".  Only a-z, A-Z, and 0-9 are allowed"
@@ -330,6 +333,24 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         if [ ${ns_length} -lt 4 -o ${ns_length} -gt 30 ]; then
             echo "${STDOUT_OFFSET}ERROR:  The docker namespace must be between 4 and 30 characters in length"
+            exit_code=${ERROR}
+        fi
+
+    fi
+
+    if [ "${registry_namespace}" != "" ]; then
+
+        # Make sure namespace is sane
+        let ns_check=`echo "${registry_namespace}" | ${my_egrep} -c "[^a-zA-Z0-9]"`
+        let ns_length=`echo -ne "${registry_namespace}" | ${my_wc} -c | ${my_awk} '{print $1}'`
+
+        if [ ${ns_check} -gt 0 ]; then
+            echo "${STDOUT_OFFSET}ERROR:  Invalid characters detected in namespace \"${registry_namespace}\".  Only a-z, A-Z, and 0-9 are allowed"
+            exit_code=${ERROR}
+        fi
+
+        if [ ${ns_length} -lt 4 -o ${ns_length} -gt 30 ]; then
+            echo "${STDOUT_OFFSET}ERROR:  The docker registry namespace must be between 4 and 30 characters in length"
             exit_code=${ERROR}
         fi
 
@@ -499,14 +520,22 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # we're done processing this docker image repo
     #
     if [ "${docker_registry}" != "" ]; then
+
+        # Override ${docker_namespace} if ${registry_namespace} is defined
+        if [ "${registry_namespace}" != "" ]; then
+            remote_namespace="${registry_namespace}"
+        else
+            remote_namespace="${docker_namespace}"
+        fi
+
         let remote_tag_check=0
         let remote_image_check=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".num_results"`
 
         # Only perform a remote tag and push if the image is absent from the remote registry
         if [ ${remote_image_check} -eq 0 ]; then
-            echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to ${docker_registry_uri}" | ${my_tee} >> "${artifact_file}"
-            ${my_docker} tag ${container_id} ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag} &&
-            ${my_docker} push ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag}
+            echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
+            ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} &&
+            ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}
         else
             # JSON results use zero based indexing
             let remote_image_counter=${remote_image_check}-1
@@ -514,12 +543,12 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             while [ ${remote_image_counter} -ge 0 ]; do
                 this_image_name=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g'`
 
-                if [ "${this_image_name}" = "${docker_namespace}/${stash_project}" ]; then
+                if [ "${this_image_name}" = "${remote_namespace}/${stash_project}" ]; then
                     remote_image_tags=`${my_curl} ${docker_registry_url}/v1/repositories/${this_image_name}/tags 2> /dev/null | ${my_jq} "." | ${my_awk} '/:/ {print $1}' | ${my_sed} -e 's/[",:]//g'`
 
                     for remote_image_tag in ${remote_image_tags} ; do
 
-                        if [ "${this_image_name}:${remote_image_tag}" = "${docker_namespace}/${stash_project}:${docker_image_tag}" ]; then
+                        if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${docker_image_tag}" ]; then
                             let remote_tag_check=${remote_tag_check}+1
                         fi
 
@@ -531,11 +560,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             done
 
             if [ ${remote_tag_check} -eq 0 ]; then
-                echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to ${docker_registry_uri}" | ${my_tee} >> "${artifact_file}"
-                ${my_docker} tag ${container_id} ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag} &&
-                ${my_docker} push ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag}
+                echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
+                ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} &&
+                ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}
             else
-                echo "Docker image tag ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+                echo "Docker image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
             fi
 
         fi
