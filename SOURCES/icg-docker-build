@@ -506,7 +506,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         fi
 
     else
-        echo "Docker image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+        echo "Docker local image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
     fi
 
 fi
@@ -564,7 +564,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} &&
                 ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}
             else
-                echo "Docker image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+                echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
             fi
 
         fi
