@@ -12,19 +12,28 @@
 # 20150114     Jason W. Plummer          Original: A generic script to run a 
 #                                        docker job from bamboo.  Added code
 #                                        to checkout and build a docker image
-#                                        from a Stash repo
+#                                        from a Stash repo.  Can also be run
+#                                        standalone.
 # 20150115     Jason W. Plummer          Added code to tag and commit docker
 #                                        images both locally and remotely if
 #                                        they are unique
 # 20150116     Jason W. Plummer          Added more verbosity for operational
 #                                        status during execution
+# 20150119     Jason W. Plummer          Added argument to support custom docker
+#                                        build arguments.  Also added code to
+#                                        support latest git tag detection.
+#                                        Added code to support making docker
+#                                        build log available as an artifact 
+#                                        when run from bamboo.
+# 20150120     Jason W. Plummer          Added support to echo remote registry
+#                                        operations into build log
 
 ################################################################################
 # DESCRIPTION
 ################################################################################
 #
 
-# NAME: icg-docker-build.sh 
+# NAME: icg-docker-build
 # 
 # This script performs a checkout of a stash based Docker project and attempts
 # to build the docker image in question using the project's Dockerfile
@@ -75,7 +84,7 @@ STDOUT_OFFSET="    "
 
 SCRIPT_NAME="${0}"
 
-USAGE="${SCRIPT_NAME}\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --docker_registry <fully qualified URL of remote docker registry server *OPTIONAL*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --docker_namespace <string 4-30 characters in length *OPTIONAL*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --stash_project <name of Stash project *REQUIRED*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --git_branch <git branch to checkout *REQUIRED*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --personal_stash_project <fully qualified Git URI for checkout from Stash *SUPERCEDES --stash_project*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --docker_build_args <Extra arguments to the docker build command> ]"
+USAGE="${SCRIPT_NAME}\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --docker_registry <fully qualified URL of remote docker registry server *OPTIONAL*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --docker_namespace <string 4-30 characters in length *OPTIONAL*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --stash_project <name of Stash project *REQUIRED*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --git_branch <git branch to checkout *REQUIRED*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --personal_stash_project <fully qualified Git URI for checkout from Stash *SUPERCEDES --stash_project*> ]\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}[ --docker_build_args <extra arguments to the docker build command *OPTIONAL*> ]"
 
 ################################################################################
 # VARIABLES
@@ -265,7 +274,7 @@ f__git_operation() {
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    for command in awk curl docker egrep git host jq mkdir rm sed sort tail wc ; do
+    for command in awk curl docker egrep git host jq mkdir rm sed sort tail tee wc ; do
         unalias ${command} > /dev/null 2>&1
         f__check_command "${command}"
 
@@ -407,8 +416,14 @@ fi
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     if [ "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
-        artifact_file="/tmp/${stash_project}.dockerbuild.log"
-        echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile ... see ${artifact_file} for status logs"
+
+        if [ "${bamboo_working_directory}" != "" ]; then
+            artifact_file="${bamboo_working_directory}/${stash_project}.dockerbuild.log"
+        else
+            artifact_file="/tmp/${stash_project}.dockerbuild.log"
+        fi
+
+        echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile ... see ${artifact_file} for status"
         cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_docker} build ${docker_build_args} . > "${artifact_file}" 2>&1
         exit_code=${?}
 
@@ -461,7 +476,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     # Only perform a local tag if the image is absent from the local registry
     if [ ${local_image_check} -eq 0 ]; then
-        echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${stash_project}:${docker_image_tag}"
+        echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
         ${my_docker} tag ${container_id} ${docker_namespace}/${stash_project}:${docker_image_tag}
         exit_code=${?}
 
@@ -470,7 +485,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         fi
 
     else
-        echo "Docker image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken"
+        echo "Docker image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
     fi
 
 fi
@@ -489,7 +504,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         # Only perform a remote tag and push if the image is absent from the remote registry
         if [ ${remote_image_check} -eq 0 ]; then
-            echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to ${docker_registry_uri}"
+            echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to ${docker_registry_uri}" | ${my_tee} >> "${artifact_file}"
             ${my_docker} tag ${container_id} ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag} &&
             ${my_docker} push ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag}
         else
@@ -516,11 +531,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             done
 
             if [ ${remote_tag_check} -eq 0 ]; then
-                echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to ${docker_registry_uri}"
+                echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to ${docker_registry_uri}" | ${my_tee} >> "${artifact_file}"
                 ${my_docker} tag ${container_id} ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag} &&
                 ${my_docker} push ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag}
             else
-                echo "Docker image tag ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken"
+                echo "Docker image tag ${docker_registry_uri}/${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
             fi
 
         fi
