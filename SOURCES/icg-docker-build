@@ -190,7 +190,17 @@ f__git_operation() {
                     fi
          
                     echo "${STDOUT_OFFSET}Performing git ${this_git_action} of ${STASH_BASE_URI}/${this_stash_project_repo}"
-                    cd "${GIT_CHECKOUT_BASE}" && ${my_git} ${this_git_action} ${STASH_BASE_URI}/${this_stash_project_repo}
+                    cd "${GIT_CHECKOUT_BASE}" && ${my_git} ${this_git_action} ${STASH_BASE_URI}/${this_stash_project_repo} &&
+
+                    # Perform a git fetch to grab all refs
+                    cd "${GIT_CHECKOUT_BASE}/${this_stash_project}" && ${my_git} fetch &&
+
+                    # Initialize any submodules
+                    if [ -e "${GIT_CHECKOUT_BASE}/${this_stash_project}/.gitmodules" ]; then
+                        ${my_git} submodule update --init --recursive &&
+                        ${my_git} submodule foreach --recursive ${my_git} fetch
+                    fi
+
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
                     /bin/false
@@ -236,6 +246,8 @@ f__git_operation() {
             
                     echo "${STDOUT_OFFSET}Performing git ${this_git_action} of branch ${this_branch} in repo ${stash_project}"
                     cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_branch}
+
+                    # TODO: Make this handle submodules
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
                     /bin/false
