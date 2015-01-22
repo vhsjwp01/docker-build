@@ -29,7 +29,9 @@
 #                                        operations into build log
 # 20150121     Jason W. Plummer          Added --registry_namespace to allow
 #                                        docker_namespace override when tagging
-#                                        and pushing to a registry server
+#                                        and pushing to a registry server.  Also
+#                                        added git branch to ${docker_image_tag}
+#                                        when not dealing with a release
 
 ################################################################################
 # DESCRIPTION
@@ -261,6 +263,7 @@ f__git_operation() {
                     this_git_extra_args="${2}"
                     this_git_ref="${3}"
                     docker_image_tag=`cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref}`
+                    docker_image_tag="${git_branch}.${docker_image_tag}"
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
                     /bin/false
