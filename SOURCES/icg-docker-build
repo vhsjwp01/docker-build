@@ -305,6 +305,12 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 shift
             ;;
 
+            *)
+                # We bail immediately on unknown or malformed inputs
+                echo "${STDOUT_OFFSET}ERROR:  Unknown command line argument ... exiting"
+                exit
+            ;;
+
         esac
 
     done
