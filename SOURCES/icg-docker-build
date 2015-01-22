@@ -1,4 +1,4 @@
-a!/bin/bash
+#!/bin/bash
 #set -x
 
 ################################################################################
@@ -32,6 +32,7 @@ a!/bin/bash
 #                                        and pushing to a registry server.  Also
 #                                        added git branch to ${docker_image_tag}
 #                                        when not dealing with a release
+# 20150122     Jason W. Plummer          Improved git branch and tag detection
 
 ################################################################################
 # DESCRIPTION
