@@ -1,4 +1,4 @@
-#!/bin/bash
+a!/bin/bash
 #set -x
 
 ################################################################################
@@ -194,8 +194,8 @@ f__git_operation() {
                     echo "${STDOUT_OFFSET}Performing git ${this_git_action} of ${STASH_BASE_URI}/${this_stash_project_repo}"
                     cd "${GIT_CHECKOUT_BASE}" && ${my_git} ${this_git_action} ${STASH_BASE_URI}/${this_stash_project_repo} &&
 
-                    # Perform a git fetch to grab all refs
-                    cd "${GIT_CHECKOUT_BASE}/${this_stash_project}" && ${my_git} fetch &&
+                    # Perform a git fetch --all to grab all refs, and a git pull --all to slurp down all branches
+                    cd "${GIT_CHECKOUT_BASE}/${this_stash_project}" && ${my_git} fetch --all && ${my_git} pull --all &&
 
                     # Initialize any submodules
                     if [ -e "${GIT_CHECKOUT_BASE}/${this_stash_project}/.gitmodules" ]; then
@@ -215,6 +215,10 @@ f__git_operation() {
                 if [ "${GIT_CHECKOUT_BASE}" != "" -a "${stash_project}" != "" -a "${2}" != "" ]; then
                     this_branch="${2}"
 
+                    # Fetch all tags as they may be needed later
+                    ${my_git} fetch --all
+                    ${my_git} fetch --tags
+
                     if [ "${this_branch}" = "lastest_tag" ]; then
                         latest_tag=`${my_git} tag | ${my_sort} | ${my_tail} -1`
 
@@ -228,7 +232,7 @@ f__git_operation() {
 
                     # See if this branch exists
                     cd "${GIT_CHECKOUT_BASE}/${stash_project}"
-                    let branch_check=`${my_git} branch | ${my_egrep} -c "\ ${this_branch}$"`
+                    let branch_check=`${my_git} branch --all | ${my_egrep} -c "origin/${this_branch}$"`
 
                     # If ${this_branch} cannot be found then see if we were passed a tag
                     if [ ${branch_check} -eq 0 ]; then
