@@ -233,7 +233,7 @@ f__git_operation() {
 
                     # See if this branch exists
                     cd "${GIT_CHECKOUT_BASE}/${stash_project}"
-                    let branch_check=`${my_git} branch --all | ${my_egrep} -c "origin/${this_branch}$"`
+                    let branch_check=`${my_git} branch -a | ${my_egrep} -c "origin/${this_branch}$"`
 
                     # If ${this_branch} cannot be found then see if we were passed a tag
                     if [ ${branch_check} -eq 0 ]; then
