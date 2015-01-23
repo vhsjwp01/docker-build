@@ -76,13 +76,17 @@
 ################################################################################
 #
 
+PATH=/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
+TERM=vt100
+export TERM PATH
+
 SUCCESS=0
 ERROR=1
 
 GIT_CHECKOUT_BASE="/usr/local/src/DOCKER"
 STASH_BASE_URI="ssh://git@stash.ingramcontent.com:7999/docker"
 
-# Checkout from Stash:
+# Example clone from Stash:
 # git clone ssh://git@stash.ingramcontent.com:7999/docker/passenger-nginx-rbenv.git
 # ${my_git} ${my_git_action} ${STASH_BASE_URI}/${stash_project_repo}
 
