@@ -77,8 +77,8 @@ for i in `awk '{print $0}' /tmp/MANIFEST.%{name}.tmp` ; do
 done | sort -u >> /tmp/MANIFEST.%{name}
 
 %post
-chown root:docker /usr/local/bin/icg-docker-build
-chmod 2750 /usr/local/bin/icg-docker-build
+chown root:docker %{install_bin_dir}/icg-docker-build
+chmod 750 %{install_bin_dir}/icg-docker-build
 
 %files -f /tmp/MANIFEST.%{name}
 
