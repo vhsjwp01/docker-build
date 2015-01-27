@@ -364,15 +364,24 @@ fi
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     while (( "${#}" )); do
+        key=`echo "${1}" | ${my_sed} -e 's?\`??g'`
+        value=`echo "${2}" | ${my_sed} -e 's?\`??g'`
 
-        case "${1}" in
+        case "${key}" in
 
             --config|--docker_registry|--docker_namespace|--docker_build_args|--git_branch|--stash_project|--personal_stash_project|--registry_namespace)
-                key=`echo "${1}" | ${my_sed} -e 's?^--??g' -e 's?\`??g'`
-                value=`echo "${2}" | ${my_sed} -e 's?^--??g' -e 's?\`??g'`
-                eval ${key}="${value}"
-                shift
-                shift
+                key=`echo "${key}" | ${my_sed} -e 's?^--??g'`
+
+                if [ "${value}" != "" ]; then
+                    eval ${key}="${value}"
+                    shift
+                    shift
+                else
+                    echo "${STDOUT_OFFSET}ERROR:  No value assignment can be made for command line argument \"--${key}\""
+                    exit_code=${ERROR}
+                    shift
+                fi
+
             ;;
 
             *)
@@ -387,7 +396,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     # If we were passed config, then make sure the config file exists,
     # that is is a text file, then source it.  Otherwise, bail immediately
-    if [ -e "${config}" ]; then
+    if [ "${config}" != "" -a -e "${config}" ]; then
         let is_text=`${my_file} "${config}" | ${my_egrep} -ic "text"`
 
         if [ ${is_text} -eq 0 ]; then
@@ -397,9 +406,6 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             source "${config}"
         fi
 
-    else
-        echo "${STDOUT_OFFSET}ERROR:  Could not source config file \"${config}\" ... exiting"
-        exit
     fi
 
     # If we were passed personal_stash_project, then parse that and redefine
