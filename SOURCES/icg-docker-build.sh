@@ -132,7 +132,7 @@ exit_code=${SUCCESS}
 
 container_id=""
 docker_image_tag=""
-docker_namespace="ingramcontent"
+default_docker_namespace="ingramcontent"
 is_release=0
 
 ################################################################################
@@ -421,6 +421,26 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         STASH_BASE_URI="${stash_base_uri}/~${docker_namespace}"
     fi
 
+    # See if we were passed a fully qualified stash URL
+    # Example: ssh://git@stash.ingramcontent.com:7999/wad/prodstatdev.git
+    if [ "${stash_project}" != "" ]; then
+        let stash_url_check=`echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}"`
+
+        # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
+        if [ ${stash_url_check} -gt 0 ]; then
+            real_stash_project=`echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}'`
+            stash_base_uri=`echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\\\$??g"`
+
+            if [ "${docker_namespace}" = "" ]; then
+                docker_namespace=`echo "${stash_base_uri}" | ${my_awk} -F'/' '{print $NF}'`
+            fi
+
+            stash_project="${real_stash_project}"
+            STASH_BASE_URI="${stash_base_uri}"
+        fi
+
+    fi
+
     # Make sure supplied arguments are sane
     if [ "${docker_namespace}" != "" ]; then
 
@@ -438,6 +458,8 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             exit_code=${ERROR}
         fi
 
+    else
+        docker_namespace="${default_docker_namespace}"
     fi
 
     if [ "${registry_namespace}" != "" ]; then
@@ -486,19 +508,6 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     fi
 
     if [ "${stash_project}" != "" -a "${git_branch}" != "" ]; then
-
-        # See if we were passed a fully qualified stash URL
-        # Example: ssh://git@stash.ingramcontent.com:7999/wad/prodstatdev.git
-        let stash_url_check=`echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}"`
-
-        # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
-        if [ ${stash_url_check} -gt 0 ]; then
-            real_stash_project=`echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}'`
-            stash_base_uri=`echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\\\$??g"`
-            docker_namespace=`echo "${stash_base_uri}" | ${my_awk} -F'/' '{print $NF}'`
-            stash_project="${real_stash_project}"
-            STASH_BASE_URI="${stash_base_uri}"
-        fi
 
         # Make sure stash project name is sane (stash project repo name should end in .git"
         git_suffix_check=`echo "${stash_project}" | ${my_egrep} -c "\.git$"`
