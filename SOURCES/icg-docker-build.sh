@@ -41,6 +41,8 @@
 #                                        supplied git branch within submodules
 # 20150127     Jason W. Plummer          Added more embedded code execution
 #                                        protection for command line args
+# 20150128     Jason W. Plummer          Added support for passing a fully 
+#                                        qualified stash project uri
 
 ################################################################################
 # DESCRIPTION
@@ -99,7 +101,7 @@ SUCCESS=0
 ERROR=1
 
 GIT_CHECKOUT_BASE="/usr/local/src/DOCKER"
-STASH_BASE_URI="ssh://git@stash.ingramcontent.com:7999/docker"
+STASH_BASE_URI="ssh://git@stash.ingramcontent.com:7999"
 
 # Example clone from Stash:
 # git clone ssh://git@stash.ingramcontent.com:7999/docker/passenger-nginx-rbenv.git
@@ -484,7 +486,20 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     if [ "${stash_project}" != "" -a "${git_branch}" != "" ]; then
 
-        # Make sure stash project name is sane (stash project name should end in .git"
+        # See if we were passed a fully qualified stash URL
+        # Example: ssh://git@stash.ingramcontent.com:7999/wad/prodstatdev.git
+        let stash_url_check=`echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}"`
+
+        # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
+        if [ ${stash_url_check} -gt 0 ]; then
+            real_stash_project=`echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}'`
+            stash_base_uri=`echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\$??g"`
+            docker_namespace=`echo "${stash_project_uri}" | ${my_awk} -F'/' '{print $NF}'`
+            stash_project="${real_stash_project}"
+            STASH_BASE_URI="${stash_base_uri}"
+        fi
+
+        # Make sure stash project name is sane (stash project repo name should end in .git"
         git_suffix_check=`echo "${stash_project}" | ${my_egrep} -c "\.git$"`
 
         if [ ${git_suffix_check} -eq 0 ]; then
