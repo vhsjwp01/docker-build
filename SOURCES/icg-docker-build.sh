@@ -42,7 +42,8 @@
 # 20150127     Jason W. Plummer          Added more embedded code execution
 #                                        protection for command line args
 # 20150128     Jason W. Plummer          Added support for passing a fully 
-#                                        qualified stash project uri
+#                                        qualified stash project uri.  Fixed
+#                                        check for Dockerfile before building
 
 ################################################################################
 # DESCRIPTION
@@ -493,8 +494,8 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
         if [ ${stash_url_check} -gt 0 ]; then
             real_stash_project=`echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}'`
-            stash_base_uri=`echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\$??g"`
-            docker_namespace=`echo "${stash_project_uri}" | ${my_awk} -F'/' '{print $NF}'`
+            stash_base_uri=`echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\\\$??g"`
+            docker_namespace=`echo "${stash_base_uri}" | ${my_awk} -F'/' '{print $NF}'`
             stash_project="${real_stash_project}"
             STASH_BASE_URI="${stash_base_uri}"
         fi
@@ -549,7 +550,7 @@ fi
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    if [ "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
+    if [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
 
         if [ "${bamboo_working_directory}" != "" ]; then
             artifact_file="${bamboo_working_directory}/${stash_project}.dockerbuild.log"
