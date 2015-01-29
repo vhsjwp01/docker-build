@@ -44,6 +44,9 @@
 # 20150128     Jason W. Plummer          Added support for passing a fully 
 #                                        qualified stash project uri.  Fixed
 #                                        check for Dockerfile before building
+# 20150129     Jason W. Plummer          Added current date in YYYYMMDDHHMMSS
+#                                        format to docker image tag when the
+#                                        git branch is not a tag
 
 ################################################################################
 # DESCRIPTION
@@ -319,8 +322,9 @@ f__git_operation() {
                 if [ "${GIT_CHECKOUT_BASE}" != "" -a "${stash_project}" != "" -a -d "${GIT_CHECKOUT_BASE}/${stash_project}" -a "${2}" != "" -a "${3}" != "" ]; then
                     this_git_extra_args="${2}"
                     this_git_ref="${3}"
+                    right_now=`${my_date} +%Y%m%d%H%M%S`
                     docker_image_tag=`cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref}`
-                    docker_image_tag="${git_branch}.${docker_image_tag}"
+                    docker_image_tag="${right_now}.${git_branch}.${docker_image_tag}"
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
                     /bin/false
@@ -349,7 +353,7 @@ f__git_operation() {
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    for command in awk basename curl dirname docker egrep file find git host jq mkdir rm sed sort tail tee wc ; do
+    for command in awk basename curl date dirname docker egrep file find git host jq mkdir rm sed sort tail tee wc ; do
         unalias ${command} > /dev/null 2>&1
         f__check_command "${command}"
 
@@ -603,7 +607,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     #
     # Use git commit hash for the current branch as the image tag ( when ${is_release} == 0 ):
     # git rev-parse --short=10 HEAD
-    # Otherwise use ${git_branch} as the image tag
+    # 
     if [ ${is_release} -eq 0 ]; then
         my_git_action="rev-parse"
         my_git_action_arg="--short=10"
