@@ -42,8 +42,9 @@ Requires: jq
 
 %define install_base /usr/local
 %define install_bin_dir %{install_base}/bin
+%define real_name icg-docker-build
 
-Source0: ~/rpmbuild/SOURCES/icg-docker-build.sh
+Source0: ~/rpmbuild/SOURCES/%{real_name}.sh
 
 %description
 icg-docker-build is a helper script to build a docker image from
@@ -53,7 +54,7 @@ a git controlled SCM repo containing a Dockerfile
 rm -rf %{buildroot}
 # Populate %{buildroot}
 mkdir -p %{buildroot}%{install_bin_dir}
-cp %{SOURCE0} %{buildroot}%{install_bin_dir}/icg-docker-build
+cp %{SOURCE0} %{buildroot}%{install_bin_dir}/%{real_name}
 
 # Build packaging manifest
 rm -rf /tmp/MANIFEST.%{name}* > /dev/null 2>&1
@@ -77,8 +78,8 @@ for i in `awk '{print $0}' /tmp/MANIFEST.%{name}.tmp` ; do
 done | sort -u >> /tmp/MANIFEST.%{name}
 
 %post
-chown root:docker %{install_bin_dir}/icg-docker-build
-chmod 750 %{install_bin_dir}/icg-docker-build
+chown root:docker %{install_bin_dir}/%{real_name}
+chmod 750 %{install_bin_dir}/%{real_name}
 
 %files -f /tmp/MANIFEST.%{name}
 
