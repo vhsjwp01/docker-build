@@ -38,7 +38,7 @@
 #                                        provides key=value pairs for runtime,
 #                                        rather than multiple command line args.
 #                                        Added code to support checkout of 
-#                                        supplied git branch within submodules
+#                                        submodiles within a git branch
 # 20150127     Jason W. Plummer          Added more embedded code execution
 #                                        protection for command line args
 # 20150128     Jason W. Plummer          Added support for passing a fully 
@@ -47,6 +47,9 @@
 # 20150129     Jason W. Plummer          Added current date in YYYYMMDDHHMMSS
 #                                        format to docker image tag when the
 #                                        git branch is not a tag
+# 20150130     Jason W. Plummer          Added --registry_tag to allow
+#                                        docker_image_tag override when pushing
+#                                        to a registry server.
 
 ################################################################################
 # DESCRIPTION
@@ -91,6 +94,8 @@
 #                            in Bourne Shell syntax, meant to be used in lieu of
 #                            multiple command line args.  This argument is 
 #                            OPTIONAL
+# --registry_tag           - The tag to use when pushing an image to a registry.
+#                            This argument is OPTIONAL
 
 ################################################################################
 # CONSTANTS
@@ -117,13 +122,15 @@ SCRIPT_NAME="${0}"
 
 USAGE_ENDLINE="\n${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}${STDOUT_OFFSET}"
 USAGE="${SCRIPT_NAME}${USAGE_ENDLINE}"
+USAGE="${USAGE}[ --config <path to a config file that provides key=value assignments (suppresses command line args) *OPTIONAL*> ]${USAGE_ENDLINE}"
+USAGE="${USAGE}[ --docker_build_args <extra arguments to the docker build command *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --docker_registry <fully qualified URL of remote docker registry server *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --docker_namespace <string 4-30 characters in length *OPTIONAL*> ]${USAGE_ENDLINE}"
-USAGE="${USAGE}[ --stash_project <name of Stash project *REQUIRED*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --git_branch <git branch to checkout *REQUIRED*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --personal_stash_project <fully qualified Git URI for checkout from Stash *SUPERCEDES --stash_project*> ]${USAGE_ENDLINE}"
-USAGE="${USAGE}[ --docker_build_args <extra arguments to the docker build command *OPTIONAL*> ]${USAGE_ENDLINE}"
-USAGE="${USAGE}[ --config <path to a config file that provides key=value assignments (suppresses command line args)> ]"
+USAGE="${USAGE}[ --registry_namespace <namespace to use when pushing to a registry *OPTIONAL*> ]${USAGE_ENDLINE}"
+USAGE="${USAGE}[ --registry_tag <image tag to use when pushing to a registry *OPTIONAL*> ]${USAGE_ENDLINE}"
+USAGE="${USAGE}[ --stash_project <name of Stash project *REQUIRED*> ]"
 
 ################################################################################
 # VARIABLES
@@ -376,7 +383,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         case "${key}" in
 
-            --config|--docker_registry|--docker_namespace|--docker_build_args|--git_branch|--stash_project|--personal_stash_project|--registry_namespace)
+            --config|--docker_build_args|--docker_namespace|--docker_registry|--git_branch|--personal_stash_project|--registry_namespace|--registry_tag|--stash_project)
                 key=`echo "${key}" | ${my_sed} -e 's?^--??g'`
 
                 if [ "${value}" != "" ]; then
@@ -401,7 +408,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     done
 
-    # If we were passed config, then make sure the config file exists,
+    # If we were passed --config, then make sure the config file exists,
     # that is is a text file, then source it.  Otherwise, bail immediately
     if [ "${config}" != "" -a -e "${config}" ]; then
         let is_text=`${my_file} "${config}" | ${my_egrep} -ic "text"`
@@ -415,7 +422,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     fi
 
-    # If we were passed personal_stash_project, then parse that and redefine
+    # If we were passed --personal_stash_project, then parse that and redefine
     # STASH_BASE_URI, stash_project, and docker_namespace
     # ssh://git@stash.ingramcontent.com:7999/~ptinsley/prodstatdev.git
     if [ "${personal_stash_project}" != "" ]; then
@@ -651,25 +658,30 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # we're done processing this docker image repo
     #
     if [ "${docker_registry}" != "" ]; then
-        remote_image_change="no"
+        remote_namespace="${docker_namespace}"
+        remote_tag="${docker_image_tag}"
 
-        # Override ${docker_namespace} if ${registry_namespace} is defined
+        # Override ${remote_namespace} if ${registry_namespace} is defined
         if [ "${registry_namespace}" != "" ]; then
             remote_namespace="${registry_namespace}"
-        else
-            remote_namespace="${docker_namespace}"
         fi
 
+        # Override ${remote_tag} if ${registry_tag} is defined
+        if [ "${registry_tag}" != "" ]; then
+            remote_tag="${registry_tag}"
+        fi
+
+        remote_image_change="no"
         let remote_tag_check=0
         let remote_image_check=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".num_results"`
 
-        # Only perform a remote tag and push if the image is absent from the remote registry
+        # Only perform a remote tag and push if the image is absent from the registry server
         if [ ${remote_image_check} -eq 0 ]; then
             remote_image_change="yes"
-            remote_image_name="${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}"
-            echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
-            ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} &&
-            ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}
+            remote_image_name="${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}"
+            echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
+            ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
+            ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
         else
             # JSON results use zero based indexing
             let remote_image_counter=${remote_image_check}-1
@@ -713,7 +725,7 @@ fi
 #
 if [ "${env_file}" != "" ]; then
 
-    for var in config docker_build_args docker_image_tag docker_namespace docker_registry docker_registry_uri git_branch personal_stash_project registry_namespace stash_project ; do
+    for var in config docker_build_args docker_image_tag docker_namespace docker_registry docker_registry_uri git_branch personal_stash_project registry_namespace registry_tag stash_project ; do
         eval "echo ${var}=\"\$${var}\""
     done > "${env_file}"
 
