@@ -80,6 +80,20 @@ done | sort -u >> /tmp/MANIFEST.%{name}
 %post
 chown root:docker %{install_bin_dir}/%{real_name}
 chmod 750 %{install_bin_dir}/%{real_name}
+if [ ! -d /usr/local/src ]; then
+    mkdir -p /usr/local/src
+fi
+chmod 775 /usr/local/src
+if [ ! -d /usr/local/src/DOCKER ]; then
+    mkdir -p /usr/local/src/DOCKER
+fi
+chmod 770 /usr/local/src/DOCKER
+chown -R root:docker /usr/local/src/DOCKER
+
+%postun
+if [ -d /usr/local/src/DOCKER ]; then
+    rm -rf /usr/local/src/DOCKER
+fi
 
 %files -f /tmp/MANIFEST.%{name}
 
