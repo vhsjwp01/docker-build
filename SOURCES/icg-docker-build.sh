@@ -629,6 +629,10 @@ fi
 # WHY:  If we got here, then ${docker_image_tag} is defined
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
+
+    # Convert '/' in ${docker_image_tag} to '-'
+    docker_image_tag=`echo "${docker_image_tag}" | ${my_sed} -e 's?/?\-?g'`
+
     local_image_change="no"
     let local_image_check=`${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${stash_project}:${docker_image_tag}$"`
 
