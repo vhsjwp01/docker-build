@@ -50,7 +50,7 @@
 # 20150130     Jason W. Plummer          Added --registry_tag to allow
 #                                        docker_image_tag override when pushing
 #                                        to a registry server.
-# 20150227     Jason W. Plummer          Missed adding --remote_tag to images
+# 20150227     Jason W. Plummer          Added missing --remote_tag to images
 #                                        that are being updated via push
 
 ################################################################################
