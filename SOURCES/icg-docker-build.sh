@@ -700,7 +700,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
                     for remote_image_tag in ${remote_image_tags} ; do
 
-                        if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${remote_tag}" ]; then
+                        if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${docker_image_tag}" ]; then
                             let remote_tag_check=${remote_tag_check}+1
                         fi
 
