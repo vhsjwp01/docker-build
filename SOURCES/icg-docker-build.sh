@@ -50,6 +50,8 @@
 # 20150130     Jason W. Plummer          Added --registry_tag to allow
 #                                        docker_image_tag override when pushing
 #                                        to a registry server.
+# 20150227     Jason W. Plummer          Missed adding --remote_tag to images
+#                                        that are being updated via push
 
 ################################################################################
 # DESCRIPTION
@@ -698,7 +700,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
                     for remote_image_tag in ${remote_image_tags} ; do
 
-                        if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${docker_image_tag}" ]; then
+                        if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${remote_tag}" ]; then
                             let remote_tag_check=${remote_tag_check}+1
                         fi
 
@@ -710,11 +712,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             done
 
             if [ ${remote_tag_check} -eq 0 ]; then
-                echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
-                ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} &&
-                ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag}
+                echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
+                ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
+                ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
             else
-                echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+                echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
             fi
 
         fi
