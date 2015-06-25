@@ -580,11 +580,19 @@ fi
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    # WHAT: If ${bamboo_ssh_pub_key} and ${bamboo_ssh_priv_key} is defined, then create
+    # WHAT: If ${SSH_PUB_KEY} and ${SSH_PRIV_KEY} is defined, then create
     #       an ssh folder at the top level and seed it as asked
     # WHY:  Needed for image borne automation
     #
-    if [ "${bamboo_ssh_pub_key}" != "" -a "${bamboo_ssh_priv_key}" != "" ]; then
+    if [ "${bamboo_ssh_pub_key}" != "" ]; then
+        SSH_PUB_KEY="${bamboo_ssh_pub_key}"
+    fi
+
+    if [ "${bamboo_ssh_priv_key}" != "" ]; then
+        SSH_PRIV_KEY="${bamboo_ssh_priv_key}"
+    fi
+
+    if [ "${SSH_PUB_KEY}" != "" -a "${SSH_PRIV_KEY}" != "" ]; then
         target_dir="${GIT_CHECKOUT_BASE}/${stash_project}/ssh"
 
         # Create the ssh directory if it is absent
@@ -592,8 +600,8 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             ${my_mkdir} -p "${target_dir}"
         fi
 
-        echo "${bamboo_ssh_pub_key}"    > "${target_dir}/id_rsa.pub"
-        echo "${bamboo_ssh_priv_key}"   > "${target_dir}/id_rsa"
+        echo "${SSH_PUB_KEY}"           > "${target_dir}/id_rsa.pub"
+        echo "${SSH_PRIV_KEY}"          > "${target_dir}/id_rsa"
         echo "StrictHostKeyChecking no" > "${target_dir}/config"
         ${my_chmod} 700 "${target_dir}"
         ${my_chmod} 644 "${target_dir}/id_rsa.pub"
