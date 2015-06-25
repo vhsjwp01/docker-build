@@ -52,6 +52,14 @@
 #                                        to a registry server.
 # 20150227     Jason W. Plummer          Added missing --remote_tag to images
 #                                        that are being updated via push
+# 20150303     Jason W. Plummer          Added support for Makefile detection
+# 20150625     Jason W. Plummer          Added support for SSH key injection.
+#                                        If the environment variables:
+#                                            bamboo_ssh_pub_key
+#                                            bamboo_ssh_priv_key
+#                                        are defined, the /root/.ssh is 
+#                                        populated with the respective values
+#                                        for id_rsa.pub and id_rsa
 
 ################################################################################
 # DESCRIPTION
@@ -215,7 +223,7 @@ f__git_operation() {
 
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
-                    /bin/false
+                    ${my_false}
                 fi
 
             ;;
@@ -248,7 +256,7 @@ f__git_operation() {
 
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
-                    /bin/false
+                    ${my_false}
                 fi
 
             ;;
@@ -321,7 +329,7 @@ f__git_operation() {
 
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
-                    /bin/false
+                    ${my_false}
                 fi
 
             ;;
@@ -336,7 +344,7 @@ f__git_operation() {
                     docker_image_tag="${right_now}.${git_branch}.${docker_image_tag}"
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
-                    /bin/false
+                    ${my_false}
                 fi
 
             ;;
@@ -362,7 +370,7 @@ f__git_operation() {
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    for command in awk basename curl date dirname docker egrep file find git host jq mkdir rm sed sort tail tee wc ; do
+    for command in awk basename chmod curl date dirname docker egrep false file find git host jq mkdir rm sed sort tail tee wc ; do
         unalias ${command} > /dev/null 2>&1
         f__check_command "${command}"
 
@@ -567,12 +575,68 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     exit_code=${?}
 fi
 
-# WHAT: Build docker image from Dockerfile
+# WHAT: Build docker image from source
 # WHY:  Asked to
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    if [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
+    # WHAT: If ${bamboo_ssh_pub_key} and ${bamboo_ssh_priv_key} is defined, then create
+    #       an ssh folder at the top level and seed it as asked
+    # WHY:  Needed for image borne automation
+    #
+    if [ "${bamboo_ssh_pub_key}" != "" -a "${bamboo_ssh_priv_key}" != "" ]; then
+        target_dir="${GIT_CHECKOUT_BASE}/${stash_project}/ssh"
+
+        # Create the ssh directory if it is absent
+        if [ ! -d "${target_dir}" ]; then
+            ${my_mkdir} -p "${target_dir}"
+        fi
+
+        echo "${bamboo_ssh_pub_key}"    > "${target_dir}/id_rsa.pub"
+        echo "${bamboo_ssh_priv_key}"   > "${target_dir}/id_rsa"
+        echo "StrictHostKeyChecking no" > "${target_dir}/config"
+        ${my_chmod} 700 "${target_dir}"
+        ${my_chmod} 644 "${target_dir}/id_rsa.pub"
+        ${my_chmod} 600 "${target_dir}/id_rsa"
+        ${my_chmod} 644 "${target_dir}/config"
+    fi
+
+    # Build using a Makefile
+    #    ASSUMPTIONS:
+    #        (1) There is a build target named "build" which builds *AND* tags the docker image
+    #        (2) There is a build target named "push" which pushes the docker image to the registry
+    if [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Makefile" ]; then
+        my_make=`which make 2> /dev/null`
+
+        if [ "${my_make}" != "" ]; then
+            let build_directive=`${my_make} -qpn | ${my_egrep} "^build:" | ${my_wc} -l | ${my_awk} '{print $1}'`
+
+            if [ ${build_directive} -gt 0 ]; then
+                echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Makefile ... see ${artifact_file} for status"
+                cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} build > "${artifact_file}" 2>&1
+                exit_code=${?}
+
+                if [ ${exit_code} -ne ${SUCCESS} ]; then
+                    err_msg="Build of Docker image ${stash_project} failed"
+                else
+                    container_id=`${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}'`
+
+                    if [ "${container_id}" = "" ]; then
+                        err_msg="Failed to determine container id after building docker image ${stash_project}"
+                        exit_code=${ERROR}
+                    fi
+
+                fi
+
+            else
+                err_msg="Makefile found, but no target named \"build\" was detected"
+                exit_code=${ERROR}
+            fi
+
+        fi
+
+    # Build using a Dockerfile
+    elif [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
 
         if [ "${bamboo_working_directory}" != "" ]; then
             artifact_file="${bamboo_working_directory}/${stash_project}.dockerbuild.log"
@@ -599,7 +663,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         fi
 
     else
-        err_msg="Could not locate Dockerfile in directory \"${GIT_CHECKOUT_BASE}/${stash_project}\""
+        err_msg="Could locate neither a Makefile nor Dockerfile in directory \"${GIT_CHECKOUT_BASE}/${stash_project}\""
         exit_code=${ERROR}
     fi
 
@@ -610,19 +674,24 @@ fi
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    # If this is a release, then ${docker_image_tag} is already defined as
-    # the git tag, otherwise we need to run git rev-parse so we can set the 
-    # ${docker_image_tag} to the shortened git commit hash for this branch
-    #
-    # Use git commit hash for the current branch as the image tag ( when ${is_release} == 0 ):
-    # git rev-parse --short=10 HEAD
-    # 
-    if [ ${is_release} -eq 0 ]; then
-        my_git_action="rev-parse"
-        my_git_action_arg="--short=10"
-        my_git_ref="HEAD"
-        f__git_operation ${my_git_action} ${my_git_action_arg} ${my_git_ref}
-        exit_code=${?}
+    # Only execute this if we are *NOT* using Makefiles
+    if [ "${my_make}" = "" ]; then
+
+        # If this is a release, then ${docker_image_tag} is already defined as
+        # the git tag, otherwise we need to run git rev-parse so we can set the 
+        # ${docker_image_tag} to the shortened git commit hash for this branch
+        #
+        # Use git commit hash for the current branch as the image tag ( when ${is_release} == 0 ):
+        # git rev-parse --short=10 HEAD
+        # 
+        if [ ${is_release} -eq 0 ]; then
+            my_git_action="rev-parse"
+            my_git_action_arg="--short=10"
+            my_git_ref="HEAD"
+            f__git_operation ${my_git_action} ${my_git_action_arg} ${my_git_ref}
+            exit_code=${?}
+        fi
+
     fi
 
 fi
@@ -632,25 +701,29 @@ fi
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    # Convert '/' in ${docker_image_tag} to '-'
-    docker_image_tag=`echo "${docker_image_tag}" | ${my_sed} -e 's?/?\-?g'`
+    # Only execute this if we are *NOT* using Makefiles
+    if [ "${my_make}" = "" ]; then
+        # Convert '/' in ${docker_image_tag} to '-'
+        docker_image_tag=`echo "${docker_image_tag}" | ${my_sed} -e 's?/?\-?g'`
 
-    local_image_change="no"
-    let local_image_check=`${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${stash_project}:${docker_image_tag}$"`
+        local_image_change="no"
+        let local_image_check=`${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${stash_project}:${docker_image_tag}$"`
 
-    # Only perform a local tag if the image is absent from the local registry
-    if [ ${local_image_check} -eq 0 ]; then
-        local_image_change="yes"
-        echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
-        ${my_docker} tag ${container_id} ${docker_namespace}/${stash_project}:${docker_image_tag}
-        exit_code=${?}
+        # Only perform a local tag if the image is absent from the local registry
+        if [ ${local_image_check} -eq 0 ]; then
+            local_image_change="yes"
+            echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
+            ${my_docker} tag ${container_id} ${docker_namespace}/${stash_project}:${docker_image_tag}
+            exit_code=${?}
 
-        if [ ${exit_code} -ne ${SUCCESS} ]; then
-            err_msg="Failed to locally tag docker image ID: ${container_id}"
+            if [ ${exit_code} -ne ${SUCCESS} ]; then
+                err_msg="Failed to locally tag docker image ID: ${container_id}"
+            fi
+
+        else
+            echo "Docker local image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
         fi
 
-    else
-        echo "Docker local image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
     fi
 
 fi
@@ -660,68 +733,91 @@ fi
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
-    # Only do this part if ${docker_registry} is defined, otherwise
-    # we're done processing this docker image repo
-    #
-    if [ "${docker_registry}" != "" ]; then
-        remote_namespace="${docker_namespace}"
-        remote_tag="${docker_image_tag}"
+    # If we are using Makefiles, then execute push directive ...
+    if [ "${my_make}" != "" ]; then
+        let push_directive=`${my_make} -qpn | ${my_egrep} "^push:" | ${my_wc} -l | ${my_awk} '{print $1}'`
 
-        # Override ${remote_namespace} if ${registry_namespace} is defined
-        if [ "${registry_namespace}" != "" ]; then
-            remote_namespace="${registry_namespace}"
-        fi
+        if [ ${build_directive} -gt 0 ]; then
+            echo "Pushing image to remote registry" | ${my_tee} >> "${artifact_file}"
+            cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} push >> "${artifact_file}"
+            exit_code=${?}
 
-        # Override ${remote_tag} if ${registry_tag} is defined
-        if [ "${registry_tag}" != "" ]; then
-            remote_tag="${registry_tag}"
-        fi
+            if [ ${exit_code} -ne ${SUCCESS} ]; then
+                err_msg="Push of Docker image ${stash_project} failed"
+            fi
 
-        remote_image_change="no"
-        let remote_tag_check=0
-        let remote_image_check=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".num_results"`
-
-        # Only perform a remote tag and push if the image is absent from the registry server
-        if [ ${remote_image_check} -eq 0 ]; then
-            remote_image_change="yes"
-            remote_image_name="${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}"
-            echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
-            ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
-            ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
         else
-            # JSON results use zero based indexing
-            let remote_image_counter=${remote_image_check}-1
+            err_msg="Makefile found, but no target named \"push\" was detected"
+            exit_code=${ERROR}
+        fi
 
-            while [ ${remote_image_counter} -ge 0 ]; do
-                this_image_name=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g'`
+    # ... otherwise, process based on docker build output and other command line directives
+    else
 
-                if [ "${this_image_name}" = "${remote_namespace}/${stash_project}" ]; then
-                    remote_image_tags=`${my_curl} ${docker_registry_url}/v1/repositories/${this_image_name}/tags 2> /dev/null | ${my_jq} "." | ${my_awk} '/:/ {print $1}' | ${my_sed} -e 's/[",:]//g'`
+        # Only do this part if ${docker_registry} is defined, otherwise
+        # we're done processing this docker image repo
+        #
+        if [ "${docker_registry}" != "" ]; then
+            remote_namespace="${docker_namespace}"
+            remote_tag="${docker_image_tag}"
 
-                    for remote_image_tag in ${remote_image_tags} ; do
+            # Override ${remote_namespace} if ${registry_namespace} is defined
+            if [ "${registry_namespace}" != "" ]; then
+                remote_namespace="${registry_namespace}"
+            fi
 
-                        if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${docker_image_tag}" ]; then
-                            let remote_tag_check=${remote_tag_check}+1
-                        fi
+            # Override ${remote_tag} if ${registry_tag} is defined
+            if [ "${registry_tag}" != "" ]; then
+                remote_tag="${registry_tag}"
+            fi
 
-                    done
+            remote_image_change="no"
+            let remote_tag_check=0
+            let remote_image_check=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".num_results"`
 
-                fi
-
-                let remote_image_counter=${remote_image_counter}-1
-            done
-
-            if [ ${remote_tag_check} -eq 0 ]; then
-                echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
+            # Only perform a remote tag and push if the image is absent from the registry server
+            if [ ${remote_image_check} -eq 0 ]; then
+                remote_image_change="yes"
+                remote_image_name="${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}"
+                echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
                 ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
                 ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
             else
-                echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+                # JSON results use zero based indexing
+                let remote_image_counter=${remote_image_check}-1
+
+                while [ ${remote_image_counter} -ge 0 ]; do
+                    this_image_name=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g'`
+
+                    if [ "${this_image_name}" = "${remote_namespace}/${stash_project}" ]; then
+                        remote_image_tags=`${my_curl} ${docker_registry_url}/v1/repositories/${this_image_name}/tags 2> /dev/null | ${my_jq} "." | ${my_awk} '/:/ {print $1}' | ${my_sed} -e 's/[",:]//g'`
+
+                        for remote_image_tag in ${remote_image_tags} ; do
+
+                            if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${docker_image_tag}" ]; then
+                                let remote_tag_check=${remote_tag_check}+1
+                            fi
+
+                        done
+
+                    fi
+
+                    let remote_image_counter=${remote_image_counter}-1
+                done
+
+                if [ ${remote_tag_check} -eq 0 ]; then
+                    echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
+                    ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
+                    ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
+                else
+                    echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+                fi
+
             fi
 
+            exit_code=${?}
         fi
 
-        exit_code=${?}
     fi
 
 fi
