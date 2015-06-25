@@ -55,9 +55,9 @@
 # 20150303     Jason W. Plummer          Added support for Makefile detection
 # 20150625     Jason W. Plummer          Added support for SSH key injection.
 #                                        If the environment variables:
-#                                            bamboo_ssh_pub_key
-#                                            bamboo_ssh_priv_key
-#                                        are defined, the /root/.ssh is 
+#                                            SSH_PUB_KEY
+#                                            SSH_PRIV_KEY
+#                                        are defined, then <source root>/ssh is 
 #                                        populated with the respective values
 #                                        for id_rsa.pub and id_rsa
 
