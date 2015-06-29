@@ -60,6 +60,7 @@
 #                                        are defined, then <source root>/ssh is 
 #                                        populated with the respective values
 #                                        for id_rsa.pub and id_rsa
+# 20150625     Jason W. Plummer          Added logging for SSH key detection
 
 ################################################################################
 # DESCRIPTION
@@ -580,32 +581,62 @@ fi
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
+    # Setup logging
+    if [ "${bamboo_working_directory}" != "" ]; then
+        artifact_file="${bamboo_working_directory}/${stash_project}.dockerbuild.log"
+        env_file="${bamboo_working_directory}/${stash_project}.env"
+    else
+        artifact_file="/tmp/${stash_project}.dockerbuild.log"
+        env_file="/tmp/${stash_project}.env"
+    fi
+
     # WHAT: If ${SSH_PUB_KEY} and ${SSH_PRIV_KEY} is defined, then create
     #       an ssh folder at the top level and seed it as asked
     # WHY:  Needed for image borne automation
     #
+
+    # Detect ssh pub key passed in as bamboo variable
     if [ "${bamboo_ssh_pub_key}" != "" ]; then
+        echo "Detected SSH public key from Bamboo" > "${artifact_file}" 2>&1
         SSH_PUB_KEY="${bamboo_ssh_pub_key}"
     fi
 
+    # Detect ssh priv key passed in as bamboo variable
     if [ "${bamboo_ssh_priv_key}" != "" ]; then
+        echo "Detected SSH private key from Bamboo" > "${artifact_file}" 2>&1
         SSH_PRIV_KEY="${bamboo_ssh_priv_key}"
     fi
 
+    # Pick up SSH keys and make them real
     if [ "${SSH_PUB_KEY}" != "" -a "${SSH_PRIV_KEY}" != "" ]; then
+        echo "Detected SSH public and private keys from ENV" > "${artifact_file}" 2>&1
         target_dir="${GIT_CHECKOUT_BASE}/${stash_project}/ssh"
 
         # Create the ssh directory if it is absent
         if [ ! -d "${target_dir}" ]; then
+            echo "Creating SSH key dir \"${target_dir}\"" > "${artifact_file}" 2>&1
             ${my_mkdir} -p "${target_dir}"
         fi
 
-        echo "${SSH_PUB_KEY}"           > "${target_dir}/id_rsa.pub"
-        echo "${SSH_PRIV_KEY}"          > "${target_dir}/id_rsa"
+        echo "Creating SSH key file \"${target_dir}/id_rsa.pub\"" > "${artifact_file}" 2>&1
+        echo -ne "${SSH_PUB_KEY}\n" > "${target_dir}/id_rsa.pub"
+
+        echo "Creating SSH key file \"${target_dir}/id_rsa\"" > "${artifact_file}" 2>&1
+        echo -ne "${SSH_PRIV_KEY}\n" > "${target_dir}/id_rsa"
+
+        echo "Creating SSH config file \"${target_dir}/config\"" > "${artifact_file}" 2>&1
         echo "StrictHostKeyChecking no" > "${target_dir}/config"
+
+        echo "Setting permissions on \"${target_dir}/config\" to 700" > "${artifact_file}" 2>&1
         ${my_chmod} 700 "${target_dir}"
+
+        echo "Setting permissions on \"${target_dir}/id_rsa.pub\" to 644" > "${artifact_file}" 2>&1
         ${my_chmod} 644 "${target_dir}/id_rsa.pub"
+
+        echo "Setting permissions on \"${target_dir}/id_rsa\" to 600" > "${artifact_file}" 2>&1
         ${my_chmod} 600 "${target_dir}/id_rsa"
+
+        echo "Setting permissions on \"${target_dir}/config\" to 644" > "${artifact_file}" 2>&1
         ${my_chmod} 644 "${target_dir}/config"
     fi
 
@@ -645,15 +676,6 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     # Build using a Dockerfile
     elif [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
-
-        if [ "${bamboo_working_directory}" != "" ]; then
-            artifact_file="${bamboo_working_directory}/${stash_project}.dockerbuild.log"
-            env_file="${bamboo_working_directory}/${stash_project}.env"
-        else
-            artifact_file="/tmp/${stash_project}.dockerbuild.log"
-            env_file="/tmp/${stash_project}.env"
-        fi
-
         echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile ... see ${artifact_file} for status"
         cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_docker} build ${docker_build_args} . > "${artifact_file}" 2>&1
         exit_code=${?}
