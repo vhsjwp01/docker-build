@@ -61,6 +61,7 @@
 #                                        populated with the respective values
 #                                        for id_rsa.pub and id_rsa
 # 20150625     Jason W. Plummer          Added logging for SSH key detection
+# 20150602     Jason W. Plummer          Added -f to force remote tag overwrite
 
 ################################################################################
 # DESCRIPTION
@@ -839,7 +840,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
                 if [ ${remote_tag_check} -eq 0 ]; then
                     echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
-                    ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
+                    ${my_docker} tag -f ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
                     ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
                 else
                     echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
