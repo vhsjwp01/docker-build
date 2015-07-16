@@ -61,7 +61,13 @@
 #                                        populated with the respective values
 #                                        for id_rsa.pub and id_rsa
 # 20150625     Jason W. Plummer          Added logging for SSH key detection
-# 20150602     Jason W. Plummer          Added -f to force remote tag overwrite
+# 20150702     Jason W. Plummer          Added -f to force remote tag overwrite
+# 20150715     Jason W. Plummer          Added support for github repos.  Using
+#                                        username + password for authentication
+#                                        is NOT supported on purpose ... instead
+#                                        add the invoking user's public SSH key
+#                                        to the project's read-only permissions
+#                                        to make this feature work
 
 ################################################################################
 # DESCRIPTION
@@ -98,6 +104,7 @@
 #                            * stash_project is set using the remaining portion
 #                              of the string after the username
 #
+# --github_project         - The fully qualified git checkout GitHub URL
 # --docker_build_args      - Extra build arguments to be passed to the docker
 #                            build process.  This argument is OPTIONAL
 # --registry_namespace     - The namespace to use when pushing to a docker
@@ -140,6 +147,7 @@ USAGE="${USAGE}[ --docker_registry <fully qualified URL of remote docker registr
 USAGE="${USAGE}[ --docker_namespace <string 4-30 characters in length *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --git_branch <git branch to checkout *REQUIRED*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --personal_stash_project <fully qualified Git URI for checkout from Stash *SUPERCEDES --stash_project*> ]${USAGE_ENDLINE}"
+USAGE="${USAGE}[ --github_project <fully qualified Git URL for checkout from GitHub *SUPERCEDES --stash_project*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --registry_namespace <namespace to use when pushing to a registry *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --registry_tag <image tag to use when pushing to a registry *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --stash_project <name of Stash project *REQUIRED*> ]"
@@ -395,7 +403,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         case "${key}" in
 
-            --config|--docker_build_args|--docker_namespace|--docker_registry|--git_branch|--personal_stash_project|--registry_namespace|--registry_tag|--stash_project)
+            --config|--docker_build_args|--docker_namespace|--docker_registry|--git_branch|--personal_stash_project|--registry_namespace|--registry_tag|--stash_project|--github_project)
                 key=`echo "${key}" | ${my_sed} -e 's?^--??g'`
 
                 if [ "${value}" != "" ]; then
@@ -442,6 +450,16 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         docker_namespace=`echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $1}'`
         stash_project=`echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $NF}'`
         STASH_BASE_URI="${stash_base_uri}/~${docker_namespace}"
+    fi
+
+    # If we were passed --github_project, then parse that snd redefine
+    # STASH_BASE_URI, stash_project, and docker_namespace
+    # git@github.com:vitalsource/vst-client.git
+    if [ "${github_project}" != "" ]; then
+        stash_base_uri=`echo "${github_project}" | ${my_awk} -F'/' '{print $1}'`
+        docker_namespace=`echo "${github_project}" | ${my_awk} -F':' '{print $2}' | awk -F'/' '{print $1}'`
+        stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
+        STASH_BASE_URI="${stash_base_uri}/${docker_namespace}"
     fi
 
     # See if we were passed a fully qualified stash URL
