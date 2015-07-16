@@ -459,7 +459,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         stash_base_uri=`echo "${github_project}" | ${my_awk} -F'/' '{print $1}'`
         docker_namespace=`echo "${github_project}" | ${my_awk} -F':' '{print $2}' | awk -F'/' '{print $1}'`
         stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
-        STASH_BASE_URI="${stash_base_uri}/${docker_namespace}"
+        STASH_BASE_URI="${stash_base_uri}"
     fi
 
     # See if we were passed a fully qualified stash URL
