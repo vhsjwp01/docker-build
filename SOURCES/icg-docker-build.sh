@@ -68,7 +68,8 @@
 #                                        add the invoking user's public SSH key
 #                                        to the project's read-only permissions
 #                                        to make this feature work
-# 20150814     Jason W. Plummer          Fixed github URI parsing error
+# 20150814     Jason W. Plummer          Added support for both HTTPS and SSH
+#                                        style github URIs
 
 ################################################################################
 # DESCRIPTION
@@ -453,13 +454,23 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         STASH_BASE_URI="${stash_base_uri}/~${docker_namespace}"
     fi
 
-    # If we were passed --github_project, then parse that snd redefine
+    # If we were passed --github_project, then parse that and redefine
     # STASH_BASE_URI, stash_project, and docker_namespace
-    # git@github.com:vitalsource/vst-client.git
+    # SSH STYLE:  git@github.com:vitalsource/vst-client.git
+    # HTTP STYLE: https://github.com/vitalsource/vst-client.git
     if [ "${github_project}" != "" ]; then
-        stash_base_uri=`echo "${github_project}" | ${my_awk} -F'/' '{print $1}'`
-        docker_namespace=`echo "${github_project}" | ${my_awk} -F':' '{print $2}' | awk -F'/' '{print $1}'`
-        stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
+        let http_style=`echo "${github_project}" | ${my_egrep} -ci "^https://"`
+
+        if [ ${http_style} -gt 0 ]; then
+            stash_base_uri=`echo "${github_project}" | ${my_sed} -e 's?^http://??g' | ${my_awk} -F'/' '{print $1}'`
+            docker_namespace=`echo "${github_project}" | ${my_awk} -F'/' '{print $4}'`
+            stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
+        else
+            stash_base_uri=`echo "${github_project}" | ${my_awk} -F'/' '{print $1}' | ${my_awk} -F':' '{print $1}'`
+            docker_namespace=`echo "${github_project}" | ${my_awk} -F':' '{print $2}' | ${my_awk} -F'/' '{print $1}'`
+            stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
+        fi
+
         STASH_BASE_URI="${stash_base_uri}"
     fi
 
