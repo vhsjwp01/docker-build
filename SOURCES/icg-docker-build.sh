@@ -463,6 +463,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         if [ ${http_style} -gt 0 ]; then
             stash_base_uri=`echo "${github_project}" | ${my_sed} -e 's?^http://??g' | ${my_awk} -F'/' '{print $1}'`
+            stash_base_uri="https://${stash_base_uri}"
             docker_namespace=`echo "${github_project}" | ${my_awk} -F'/' '{print $4}'`
             stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
         else
