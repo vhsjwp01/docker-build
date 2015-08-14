@@ -68,6 +68,7 @@
 #                                        add the invoking user's public SSH key
 #                                        to the project's read-only permissions
 #                                        to make this feature work
+# 20150814     Jason W. Plummer          Fixed github URI parsing error
 
 ################################################################################
 # DESCRIPTION
@@ -456,7 +457,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # STASH_BASE_URI, stash_project, and docker_namespace
     # git@github.com:vitalsource/vst-client.git
     if [ "${github_project}" != "" ]; then
-        stash_base_uri=`echo "${github_project}" | ${my_awk} -F'/' '{print $1}'`
+        stash_base_uri=`echo "${github_project}" | ${my_awk} -F':' '{print $1}'`
         docker_namespace=`echo "${github_project}" | ${my_awk} -F':' '{print $2}' | awk -F'/' '{print $1}'`
         stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
         STASH_BASE_URI="${stash_base_uri}"
