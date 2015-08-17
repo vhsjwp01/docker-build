@@ -71,6 +71,9 @@
 # 20150814     Jason W. Plummer          Added support for both HTTPS and SSH
 #                                        style github URIs
 # 20150817     Jason W. Plummer          Fixed http/https parsing of github URLs
+#                                        and also added support for 
+#                                        github_username and github_password 
+#                                        environment variables
 
 ################################################################################
 # DESCRIPTION
@@ -460,11 +463,37 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # SSH STYLE:  git@github.com:vitalsource/vst-client.git
     # HTTP STYLE: https://github.com/vitalsource/vst-client.git
     if [ "${github_project}" != "" ]; then
+
+
         let http_style=`echo "${github_project}" | ${my_egrep} -ci "^https://"`
 
         if [ ${http_style} -gt 0 ]; then
+
+            # WHAT: If ${GITHUB_USER} and ${GITHUB_PASSWORD} is defined, then 
+            #       use them later for github project URL construction
+            # WHY:  Needed for github automation via authenticated URL
+            #
+    
+            # Detect github user passed in as bamboo variable
+            if [ "${bamboo_github_user}" != "" ]; then
+                echo "Detected GitHub user from Bamboo" >> "${artifact_file}" 2>&1
+                GITHUB_USER="${bamboo_github_user}"
+            fi
+    
+            # Detect github password passed in as bamboo variable
+            if [ "${bamboo_github_password}" != "" ]; then
+                echo "Detected GitHub password from Bamboo" >> "${artifact_file}" 2>&1
+                GITHUB_PASSWORD="${bamboo_github_password}"
+            fi
+
             stash_base_uri=`echo "${github_project}" | ${my_sed} -e 's?^http://??g' -e 's?^https://??g' | ${my_awk} -F'/' '{print $1}'`
-            stash_base_uri="https://${stash_base_uri}"
+
+            if [ "${GITHUB_USER}" != "" -a "${GITHUB_PASSWORD}" != "" ]; then
+                stash_base_uri="https://${GITHUB_USER}:${GITHUB_PASSWORD}@${stash_base_uri}"
+            else
+                stash_base_uri="https://${stash_base_uri}"
+            fi
+
             docker_namespace=`echo "${github_project}" | ${my_awk} -F'/' '{print $4}'`
             stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
             STASH_BASE_URI="${stash_base_uri}/${docker_namespace}"
