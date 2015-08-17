@@ -476,13 +476,13 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     
             # Detect github user passed in as bamboo variable
             if [ "${bamboo_github_user}" != "" ]; then
-                echo "Detected GitHub user from Bamboo" >> "${artifact_file}" 2>&1
+                echo "Detected GitHub user from Bamboo"
                 GITHUB_USER="${bamboo_github_user}"
             fi
     
             # Detect github password passed in as bamboo variable
             if [ "${bamboo_github_password}" != "" ]; then
-                echo "Detected GitHub password from Bamboo" >> "${artifact_file}" 2>&1
+                echo "Detected GitHub password from Bamboo"
                 GITHUB_PASSWORD="${bamboo_github_password}"
             fi
 
