@@ -70,6 +70,7 @@
 #                                        to make this feature work
 # 20150814     Jason W. Plummer          Added support for both HTTPS and SSH
 #                                        style github URIs
+# 20150817     Jason W. Plummer          Fixed http/https parsing of github URLs
 
 ################################################################################
 # DESCRIPTION
@@ -462,7 +463,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         let http_style=`echo "${github_project}" | ${my_egrep} -ci "^https://"`
 
         if [ ${http_style} -gt 0 ]; then
-            stash_base_uri=`echo "${github_project}" | ${my_sed} -e 's?^http://??g' | ${my_awk} -F'/' '{print $1}'`
+            stash_base_uri=`echo "${github_project}" | ${my_sed} -e 's?^http://??g' -e 's?^https://??g' | ${my_awk} -F'/' '{print $1}'`
             stash_base_uri="https://${stash_base_uri}"
             docker_namespace=`echo "${github_project}" | ${my_awk} -F'/' '{print $4}'`
             stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
