@@ -9,7 +9,7 @@
 
 Summary: A Docker build framework tailored for git based projects
 Name: icg-docker-build
-Release: 12.EL%{distro_major_ver}
+Release: 13.EL%{distro_major_ver}
 License: GNU
 Group: Docker/Development
 BuildRoot: %{_tmppath}/%{name}-root
@@ -37,7 +37,7 @@ Requires: grep
 Requires: sed
 
 # These Requires can be found in EPEL
-Requires: docker-io
+Requires: /usr/bin/docker
 Requires: jq
 
 %define install_base /usr/local
