@@ -74,6 +74,9 @@
 #                                        and also added support for 
 #                                        github_username and github_password 
 #                                        environment variables
+# 20160107     Jason W. Plummer          Refactored all artifact file operations
+#                                        to use the tee command.  Refactored all
+#                                        back tick assignment operations.
 
 ################################################################################
 # DESCRIPTION
@@ -189,7 +192,7 @@ f__check_command() {
     my_command="${1}"
 
     if [ "${my_command}" != "" ]; then
-        my_command_check=`unalias "${i}" 2> /dev/null ; which "${1}" 2> /dev/null`
+        my_command_check=$(unalias "${i}" 2> /dev/null ; which "${1}" 2> /dev/null)
 
         if [ "${my_command_check}" = "" ]; then
             return_code=${ERROR}
@@ -231,7 +234,7 @@ f__git_operation() {
 
                     if [ "${2}" = "" ]; then
                         cd "${GIT_CHECKOUT_BASE}/${stash_project}"
-                        git_branch=`${my_git} ${this_git_action} 2> /dev/null | ${my_egrep} "^\*" | ${my_awk} '{print $NF}'`
+                        git_branch=$(${my_git} ${this_git_action} 2> /dev/null | ${my_egrep} "^\*" | ${my_awk} '{print $NF}')
                     else
                         new_branch="${2}"
                         ${my_git} ${this_git_action} ${new_branch}
@@ -248,7 +251,7 @@ f__git_operation() {
 
                 if [ "${GIT_CHECKOUT_BASE}" != "" -a "${2}" != "" ]; then
                     this_stash_project_repo="${2}"
-                    this_stash_project=`echo "${this_stash_project_repo}" | ${my_sed} -e 's/\.git$//g'`
+                    this_stash_project=$(echo "${this_stash_project_repo}" | ${my_sed} -e 's/\.git$//g')
 
                     if [ -d "${GIT_CHECKOUT_BASE}/${this_stash_project}" ]; then
                         ${my_rm} -rf "${GIT_CHECKOUT_BASE}/${this_stash_project}"
@@ -287,7 +290,7 @@ f__git_operation() {
                     ${my_git} fetch --tags
 
                     if [ "${this_branch}" = "lastest_tag" ]; then
-                        latest_tag=`${my_git} tag | ${my_sort} | ${my_tail} -1`
+                        latest_tag=$(${my_git} tag | ${my_sort} | ${my_tail} -1)
 
                         if [ "${latest_tag}" != "" ]; then
                             this_branch="${latest_tag}"
@@ -299,11 +302,11 @@ f__git_operation() {
 
                     # See if this branch exists
                     cd "${GIT_CHECKOUT_BASE}/${stash_project}"
-                    let branch_check=`${my_git} branch -a | ${my_egrep} -c "origin/${this_branch}$"`
+                    let branch_check=$(${my_git} branch -a | ${my_egrep} -c "origin/${this_branch}$")
 
                     # If ${this_branch} cannot be found then see if we were passed a tag
                     if [ ${branch_check} -eq 0 ]; then
-                        let branch_check=`${my_git} tag | ${my_egrep} -c "^${this_branch}$"`
+                        let branch_check=$(${my_git} tag | ${my_egrep} -c "^${this_branch}$")
 
                         if [ ${branch_check} -gt 0 ]; then
                             let is_release=1
@@ -321,13 +324,13 @@ f__git_operation() {
                     cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_branch}
 
                     # Find our submodules and perform git checkout against them
-                    submodule_files=`${my_find} . -depth -type f -name ".gitmodules"`
+                    submodule_files=$(${my_find} . -depth -type f -name ".gitmodules")
 
                     if [ "${submodule_files}" != "" ]; then
 
                         for submodule_file in ${submodule_files}; do
-                            base_scm_dir=`${my_dirname} "${submodule_file}"`
-                            these_submodules=`${my_egrep} "path =" "${submodule_file}" | ${my_awk} '{print $NF}'`
+                            base_scm_dir=$(${my_dirname} "${submodule_file}")
+                            these_submodules=$(${my_egrep} "path =" "${submodule_file}" | ${my_awk} '{print $NF}')
 
                             # Try to checkout the branch name we were passed, otherwise fall back to the master branch for the submodule
                             for this_submodule in ${these_submodules} ; do
@@ -355,8 +358,8 @@ f__git_operation() {
                 if [ "${GIT_CHECKOUT_BASE}" != "" -a "${stash_project}" != "" -a -d "${GIT_CHECKOUT_BASE}/${stash_project}" -a "${2}" != "" -a "${3}" != "" ]; then
                     this_git_extra_args="${2}"
                     this_git_ref="${3}"
-                    right_now=`${my_date} +%Y%m%d%H%M%S`
-                    docker_image_tag=`cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref}`
+                    right_now=$(${my_date} +%Y%m%d%H%M%S)
+                    docker_image_tag=$(cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref})
                     docker_image_tag="${right_now}.${git_branch}.${docker_image_tag}"
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
@@ -404,13 +407,13 @@ fi
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     while (( "${#}" )); do
-        key=`echo "${1}" | ${my_sed} -e 's?\`??g'`
-        value=`echo "${2}" | ${my_sed} -e 's?\`??g'`
+        key=$(echo "${1}" | ${my_sed} -e 's?\`??g')
+        value=$(echo "${2}" | ${my_sed} -e 's?\`??g')
 
         case "${key}" in
 
             --config|--docker_build_args|--docker_namespace|--docker_registry|--git_branch|--personal_stash_project|--registry_namespace|--registry_tag|--stash_project|--github_project)
-                key=`echo "${key}" | ${my_sed} -e 's?^--??g'`
+                key=$(echo "${key}" | ${my_sed} -e 's?^--??g')
 
                 if [ "${value}" != "" ]; then
                     eval ${key}="${value}"
@@ -437,7 +440,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # If we were passed --config, then make sure the config file exists,
     # that is is a text file, then source it.  Otherwise, bail immediately
     if [ "${config}" != "" -a -e "${config}" ]; then
-        let is_text=`${my_file} "${config}" | ${my_egrep} -ic "text"`
+        let is_text=$(${my_file} "${config}" | ${my_egrep} -ic "text")
 
         if [ ${is_text} -eq 0 ]; then
             echo "${STDOUT_OFFSET}ERROR:  Config file \"${config}\" is not a text file ... exiting"
@@ -452,9 +455,9 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # STASH_BASE_URI, stash_project, and docker_namespace
     # ssh://git@stash.ingramcontent.com:7999/~ptinsley/prodstatdev.git
     if [ "${personal_stash_project}" != "" ]; then
-        stash_base_uri=`echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $1}' | ${my_sed} -e 's?/$??g'`
-        docker_namespace=`echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $1}'`
-        stash_project=`echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $NF}'`
+        stash_base_uri=$(echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $1}' | ${my_sed} -e 's?/$??g')
+        docker_namespace=$(echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $1}')
+        stash_project=$(echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $NF}')
         STASH_BASE_URI="${stash_base_uri}/~${docker_namespace}"
     fi
 
@@ -465,7 +468,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     if [ "${github_project}" != "" ]; then
 
 
-        let http_style=`echo "${github_project}" | ${my_egrep} -ci "^https://"`
+        let http_style=$(echo "${github_project}" | ${my_egrep} -ci "^https://")
 
         if [ ${http_style} -gt 0 ]; then
 
@@ -486,7 +489,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 GITHUB_PASSWORD="${bamboo_github_password}"
             fi
 
-            stash_base_uri=`echo "${github_project}" | ${my_sed} -e 's?^http://??g' -e 's?^https://??g' | ${my_awk} -F'/' '{print $1}'`
+            stash_base_uri=$(echo "${github_project}" | ${my_sed} -e 's?^http://??g' -e 's?^https://??g' | ${my_awk} -F'/' '{print $1}')
 
             if [ "${GITHUB_USER}" != "" -a "${GITHUB_PASSWORD}" != "" ]; then
                 stash_base_uri="https://${GITHUB_USER}:${GITHUB_PASSWORD}@${stash_base_uri}"
@@ -494,13 +497,13 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 stash_base_uri="https://${stash_base_uri}"
             fi
 
-            docker_namespace=`echo "${github_project}" | ${my_awk} -F'/' '{print $4}'`
-            stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
+            docker_namespace=$(echo "${github_project}" | ${my_awk} -F'/' '{print $4}')
+            stash_project=$(echo "${github_project}" | ${my_awk} -F'/' '{print $NF}')
             STASH_BASE_URI="${stash_base_uri}/${docker_namespace}"
         else
-            stash_base_uri=`echo "${github_project}" | ${my_awk} -F'/' '{print $1}' | ${my_awk} -F':' '{print $1}'`
-            docker_namespace=`echo "${github_project}" | ${my_awk} -F':' '{print $2}' | ${my_awk} -F'/' '{print $1}'`
-            stash_project=`echo "${github_project}" | ${my_awk} -F'/' '{print $NF}'`
+            stash_base_uri=$(echo "${github_project}" | ${my_awk} -F'/' '{print $1}' | ${my_awk} -F':' '{print $1}')
+            docker_namespace=$(echo "${github_project}" | ${my_awk} -F':' '{print $2}' | ${my_awk} -F'/' '{print $1}')
+            stash_project=$(echo "${github_project}" | ${my_awk} -F'/' '{print $NF}')
             STASH_BASE_URI="${stash_base_uri}:${docker_namespace}"
         fi
 
@@ -509,15 +512,15 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # See if we were passed a fully qualified stash URL
     # Example: ssh://git@stash.ingramcontent.com:7999/wad/prodstatdev.git
     if [ "${stash_project}" != "" ]; then
-        let stash_url_check=`echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}"`
+        let stash_url_check=$(echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}")
 
         # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
         if [ ${stash_url_check} -gt 0 ]; then
-            real_stash_project=`echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}'`
-            stash_base_uri=`echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\\\$??g"`
+            real_stash_project=$(echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}')
+            stash_base_uri=$(echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\\\$??g")
 
             if [ "${docker_namespace}" = "" ]; then
-                docker_namespace=`echo "${stash_base_uri}" | ${my_awk} -F'/' '{print $NF}'`
+                docker_namespace=$(echo "${stash_base_uri}" | ${my_awk} -F'/' '{print $NF}')
             fi
 
             stash_project="${real_stash_project}"
@@ -530,8 +533,8 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     if [ "${docker_namespace}" != "" ]; then
 
         # Make sure namespace is sane
-        let ns_check=`echo "${docker_namespace}" | ${my_egrep} -c "[^a-zA-Z0-9]"`
-        let ns_length=`echo -ne "${docker_namespace}" | ${my_wc} -c | ${my_awk} '{print $1}'`
+        let ns_check=$(echo "${docker_namespace}" | ${my_egrep} -c "[^a-zA-Z0-9]")
+        let ns_length=$(echo -ne "${docker_namespace}" | ${my_wc} -c | ${my_awk} '{print $1}')
 
         if [ ${ns_check} -gt 0 ]; then
             echo "${STDOUT_OFFSET}ERROR:  Invalid characters detected in namespace \"${docker_namespace}\".  Only a-z, A-Z, and 0-9 are allowed"
@@ -550,8 +553,8 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     if [ "${registry_namespace}" != "" ]; then
 
         # Make sure namespace is sane
-        let ns_check=`echo "${registry_namespace}" | ${my_egrep} -c "[^a-zA-Z0-9]"`
-        let ns_length=`echo -ne "${registry_namespace}" | ${my_wc} -c | ${my_awk} '{print $1}'`
+        let ns_check=$(echo "${registry_namespace}" | ${my_egrep} -c "[^a-zA-Z0-9]")
+        let ns_length=$(echo -ne "${registry_namespace}" | ${my_wc} -c | ${my_awk} '{print $1}')
 
         if [ ${ns_check} -gt 0 ]; then
             echo "${STDOUT_OFFSET}ERROR:  Invalid characters detected in namespace \"${registry_namespace}\".  Only a-z, A-Z, and 0-9 are allowed"
@@ -568,14 +571,14 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     if [ "${docker_registry}" != "" ]; then
 
         # Make sure docker_registry is a URL
-        let dr_url_check=`echo "${docker_registry}" | ${my_egrep} -c "^http"`
+        let dr_url_check=$(echo "${docker_registry}" | ${my_egrep} -c "^http")
 
         if [ ${dr_url_check} -gt 0 ]; then
 
             # We use the uri env var to perform docker pull and push commands
-            docker_registry_uri=`echo "${docker_registry}" | ${my_awk} -F'//' '{print $NF}'`
-            docker_registry_host=`echo "${docker_registry_uri}" | awk -F':' '{print $1}'`
-            let is_valid_host=`${my_host} "${docker_registry_host}" | ${my_egrep} -c "has address|domain name pointer"`
+            docker_registry_uri=$(echo "${docker_registry}" | ${my_awk} -F'//' '{print $NF}')
+            docker_registry_host=$(echo "${docker_registry_uri}" | awk -F':' '{print $1}')
+            let is_valid_host=$(${my_host} "${docker_registry_host}" | ${my_egrep} -c "has address|domain name pointer")
 
             # We use the url env var to perform curl commands
             if [ ${is_valid_host} -gt 0 ]; then
@@ -595,13 +598,13 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     if [ "${stash_project}" != "" -a "${git_branch}" != "" ]; then
 
         # Make sure stash project name is sane (stash project repo name should end in .git"
-        git_suffix_check=`echo "${stash_project}" | ${my_egrep} -c "\.git$"`
+        git_suffix_check=$(echo "${stash_project}" | ${my_egrep} -c "\.git$")
 
         if [ ${git_suffix_check} -eq 0 ]; then
             stash_project_repo="${stash_project}.git"
         else
             stash_project_repo="${stash_project}"
-            stash_project=`echo "${stash_project}" | ${my_sed} -e 's/\.git$//g'`
+            stash_project=$(echo "${stash_project}" | ${my_sed} -e 's/\.git$//g')
         fi
 
     else
@@ -653,7 +656,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         env_file="/tmp/${stash_project}.env"
     fi
 
-    echo "Starting build `${my_date}`" > "${artifact_file}"
+    echo "Starting build $(${my_date})" | ${my_tee} "${artifact_file}"
 
     # WHAT: If ${SSH_PUB_KEY} and ${SSH_PRIV_KEY} is defined, then create
     #       an ssh folder at the top level and seed it as asked
@@ -662,46 +665,46 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     # Detect ssh pub key passed in as bamboo variable
     if [ "${bamboo_ssh_pub_key}" != "" ]; then
-        echo "Detected SSH public key from Bamboo" >> "${artifact_file}" 2>&1
+        echo "Detected SSH public key from Bamboo" | ${my_tee} -a "${artifact_file}"
         SSH_PUB_KEY="${bamboo_ssh_pub_key}"
     fi
 
     # Detect ssh priv key passed in as bamboo variable
     if [ "${bamboo_ssh_priv_key}" != "" ]; then
-        echo "Detected SSH private key from Bamboo" >> "${artifact_file}" 2>&1
+        echo "Detected SSH private key from Bamboo" | ${my_tee} -a  "${artifact_file}"
         SSH_PRIV_KEY="${bamboo_ssh_priv_key}"
     fi
 
     # Pick up SSH keys and make them real
     if [ "${SSH_PUB_KEY}" != "" -a "${SSH_PRIV_KEY}" != "" ]; then
-        echo "Detected SSH public and private keys from ENV" >> "${artifact_file}" 2>&1
+        echo "Detected SSH public and private keys from ENV" | ${my_tee} -a "${artifact_file}"
         target_dir="${GIT_CHECKOUT_BASE}/${stash_project}/ssh"
 
         # Create the ssh directory if it is absent
         if [ ! -d "${target_dir}" ]; then
-            echo "Creating SSH key dir \"${target_dir}\"" >> "${artifact_file}" 2>&1
+            echo "Creating SSH key dir \"${target_dir}\"" | ${my_tee} -a "${artifact_file}"
             ${my_mkdir} -p "${target_dir}"
         fi
 
-        echo "Creating SSH key file \"${target_dir}/id_rsa.pub\"" >> "${artifact_file}" 2>&1
+        echo "Creating SSH key file \"${target_dir}/id_rsa.pub\"" | ${my_tee} -a "${artifact_file}"
         echo -ne "${SSH_PUB_KEY}\n" > "${target_dir}/id_rsa.pub"
 
-        echo "Creating SSH key file \"${target_dir}/id_rsa\"" >> "${artifact_file}" 2>&1
+        echo "Creating SSH key file \"${target_dir}/id_rsa\"" | ${my_tee} -a "${artifact_file}"
         echo -ne "${SSH_PRIV_KEY}\n" > "${target_dir}/id_rsa"
 
-        echo "Creating SSH config file \"${target_dir}/config\"" >> "${artifact_file}" 2>&1
+        echo "Creating SSH config file \"${target_dir}/config\"" | ${my_tee} -a "${artifact_file}"
         echo "StrictHostKeyChecking no" > "${target_dir}/config"
 
-        echo "Setting permissions on \"${target_dir}/config\" to 700" >> "${artifact_file}" 2>&1
+        echo "Setting permissions on \"${target_dir}/config\" to 700" | ${my_tee} -a "${artifact_file}"
         ${my_chmod} 700 "${target_dir}"
 
-        echo "Setting permissions on \"${target_dir}/id_rsa.pub\" to 644" >> "${artifact_file}" 2>&1
+        echo "Setting permissions on \"${target_dir}/id_rsa.pub\" to 644" | ${my_tee} -a "${artifact_file}"
         ${my_chmod} 644 "${target_dir}/id_rsa.pub"
 
-        echo "Setting permissions on \"${target_dir}/id_rsa\" to 600" >> "${artifact_file}" 2>&1
+        echo "Setting permissions on \"${target_dir}/id_rsa\" to 600" | ${my_tee} -a "${artifact_file}"
         ${my_chmod} 600 "${target_dir}/id_rsa"
 
-        echo "Setting permissions on \"${target_dir}/config\" to 644" >> "${artifact_file}" 2>&1
+        echo "Setting permissions on \"${target_dir}/config\" to 644" | ${my_tee} -a "${artifact_file}"
         ${my_chmod} 644 "${target_dir}/config"
     fi
 
@@ -710,20 +713,20 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     #        (1) There is a build target named "build" which builds *AND* tags the docker image
     #        (2) There is a build target named "push" which pushes the docker image to the registry
     if [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Makefile" ]; then
-        my_make=`which make 2> /dev/null`
+        my_make=$(which make 2> /dev/null)
 
         if [ "${my_make}" != "" ]; then
-            let build_directive=`${my_make} -qpn | ${my_egrep} "^build:" | ${my_wc} -l | ${my_awk} '{print $1}'`
+            let build_directive=$(${my_make} -qpn | ${my_egrep} "^build:" | ${my_wc} -l | ${my_awk} '{print $1}')
 
             if [ ${build_directive} -gt 0 ]; then
                 echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Makefile ... see ${artifact_file} for status"
-                cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} build >> "${artifact_file}" 2>&1
+                cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} build 2>&1 | ${my_tee} -a "${artifact_file}"
                 exit_code=${?}
 
                 if [ ${exit_code} -ne ${SUCCESS} ]; then
                     err_msg="Build of Docker image ${stash_project} failed"
                 else
-                    container_id=`${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}'`
+                    container_id=$(${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}')
 
                     if [ "${container_id}" = "" ]; then
                         err_msg="Failed to determine container id after building docker image ${stash_project}"
@@ -742,13 +745,13 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # Build using a Dockerfile
     elif [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
         echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile ... see ${artifact_file} for status"
-        cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_docker} build ${docker_build_args} . >> "${artifact_file}" 2>&1
+        cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_docker} build ${docker_build_args} . 2>&1 | ${my_tee} -a  "${artifact_file}"
         exit_code=${?}
 
         if [ ${exit_code} -ne ${SUCCESS} ]; then
             err_msg="Build of Docker image ${stash_project} failed"
         else
-            container_id=`${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}'`
+            container_id=$(${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}')
 
             if [ "${container_id}" = "" ]; then
                 err_msg="Failed to determine container id after building docker image ${stash_project}"
@@ -799,15 +802,15 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # Only execute this if we are *NOT* using Makefiles
     if [ "${my_make}" = "" ]; then
         # Convert '/' in ${docker_image_tag} to '-'
-        docker_image_tag=`echo "${docker_image_tag}" | ${my_sed} -e 's?/?\-?g'`
+        docker_image_tag=$(echo "${docker_image_tag}" | ${my_sed} -e 's?/?\-?g')
 
         local_image_change="no"
-        let local_image_check=`${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${stash_project}:${docker_image_tag}$"`
+        let local_image_check=$(${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${stash_project}:${docker_image_tag}$")
 
         # Only perform a local tag if the image is absent from the local registry
         if [ ${local_image_check} -eq 0 ]; then
             local_image_change="yes"
-            echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} >> "${artifact_file}"
+            echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} -a "${artifact_file}"
             ${my_docker} tag ${container_id} ${docker_namespace}/${stash_project}:${docker_image_tag}
             exit_code=${?}
 
@@ -816,7 +819,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             fi
 
         else
-            echo "Docker local image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+            echo "Docker local image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
         fi
 
     fi
@@ -830,11 +833,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     # If we are using Makefiles, then execute push directive ...
     if [ "${my_make}" != "" ]; then
-        let push_directive=`${my_make} -qpn | ${my_egrep} "^push:" | ${my_wc} -l | ${my_awk} '{print $1}'`
+        let push_directive=$(${my_make} -qpn | ${my_egrep} "^push:" | ${my_wc} -l | ${my_awk} '{print $1}')
 
         if [ ${build_directive} -gt 0 ]; then
-            echo "Pushing image to remote registry" | ${my_tee} >> "${artifact_file}"
-            cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} push >> "${artifact_file}"
+            echo "Pushing image to remote registry" | ${my_tee} -a "${artifact_file}"
+            cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} push 2>&1 | ${my_tee} -a "${artifact_file}"
             exit_code=${?}
 
             if [ ${exit_code} -ne ${SUCCESS} ]; then
@@ -868,13 +871,13 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
             remote_image_change="no"
             let remote_tag_check=0
-            let remote_image_check=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".num_results"`
+            let remote_image_check=$(${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".num_results")
 
             # Only perform a remote tag and push if the image is absent from the registry server
             if [ ${remote_image_check} -eq 0 ]; then
                 remote_image_change="yes"
                 remote_image_name="${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}"
-                echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
+                echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
                 ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
                 ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
             else
@@ -882,10 +885,10 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 let remote_image_counter=${remote_image_check}-1
 
                 while [ ${remote_image_counter} -ge 0 ]; do
-                    this_image_name=`${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g'`
+                    this_image_name=$(${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g')
 
                     if [ "${this_image_name}" = "${remote_namespace}/${stash_project}" ]; then
-                        remote_image_tags=`${my_curl} ${docker_registry_url}/v1/repositories/${this_image_name}/tags 2> /dev/null | ${my_jq} "." | ${my_awk} '/:/ {print $1}' | ${my_sed} -e 's/[",:]//g'`
+                        remote_image_tags=$(${my_curl} ${docker_registry_url}/v1/repositories/${this_image_name}/tags 2> /dev/null | ${my_jq} "." | ${my_awk} '/:/ {print $1}' | ${my_sed} -e 's/[",:]//g')
 
                         for remote_image_tag in ${remote_image_tags} ; do
 
@@ -901,11 +904,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 done
 
                 if [ ${remote_tag_check} -eq 0 ]; then
-                    echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} >> "${artifact_file}"
+                    echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
                     ${my_docker} tag -f ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
                     ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
                 else
-                    echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} >> "${artifact_file}"
+                    echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
                 fi
 
             fi
