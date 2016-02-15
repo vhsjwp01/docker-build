@@ -77,6 +77,8 @@
 # 20160107     Jason W. Plummer          Refactored all artifact file operations
 #                                        to use the tee command.  Refactored all
 #                                        back tick assignment operations.
+# 20160215     Jason W. Plummer          Fixed error introduced by modifications
+#                                        made on 20160107
 
 ################################################################################
 # DESCRIPTION
@@ -517,7 +519,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
         if [ ${stash_url_check} -gt 0 ]; then
             real_stash_project=$(echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}')
-            stash_base_uri=$(echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\\\$??g")
+            stash_base_uri=$(echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\$??g")
 
             if [ "${docker_namespace}" = "" ]; then
                 docker_namespace=$(echo "${stash_base_uri}" | ${my_awk} -F'/' '{print $NF}')
