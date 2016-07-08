@@ -49,7 +49,7 @@ Requires: jq
 %define container_cleanup_real_name docker-container-cleanup
 
 Source0: ~/rpmbuild/SOURCES/%{real_name}.sh
-Source1: ~/rpmbuild/SOURCES/%{hipchat_script}.sh
+Source1: ~/rpmbuild/SOURCES/%{hipchat_script}
 Source2: ~/rpmbuild/SOURCES/%{container_cleanup_real_name}.sh
 Source3: ~/rpmbuild/SOURCES/docker_cleanup.conf
 
