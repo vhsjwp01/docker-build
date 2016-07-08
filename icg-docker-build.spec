@@ -46,7 +46,7 @@ Requires: jq
 %define install_sbin_dir %{install_base}/sbin
 %define real_name icg-docker-build
 %define hipchat_script hipchat_room_message
-%define container_cleanup_real_name docker-container-cleanup
+%define container_cleanup_real_name docker-cleanup
 
 Source0: ~/rpmbuild/SOURCES/%{real_name}.sh
 Source1: ~/rpmbuild/SOURCES/%{hipchat_script}
