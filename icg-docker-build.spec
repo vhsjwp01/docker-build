@@ -63,7 +63,7 @@ rm -rf %{buildroot}
 mkdir -p %{buildroot}%{install_bin_dir}
 cp %{SOURCE0} %{buildroot}%{install_bin_dir}/%{real_name}
 cp %{SOURCE1} %{buildroot}%{install_bin_dir}/%{hipchat_script}
-mkdir -p %{buildroot}%{install_bin_dir}
+mkdir -p %{buildroot}%{install_sbin_dir}
 cp %{SOURCE2} %{buildroot}%{install_sbin_dir}/%{container_cleanup_real_name}
 mkdir -p %{buildroot}%{etc_sysconfig}
 cp %{SOURCE3} %{buildroot}%{etc_sysconfig}
