@@ -9,7 +9,7 @@
 
 Summary: A Docker build framework tailored for git based projects
 Name: icg-docker-build
-Release: 16.EL%{distro_major_ver}
+Release: 18.EL%{distro_major_ver}
 License: GNU
 Group: Docker/Development
 BuildRoot: %{_tmppath}/%{name}-root
@@ -40,11 +40,18 @@ Requires: sed
 Requires: /usr/bin/docker
 Requires: jq
 
+%define etc_sysconfig /etc/sysconfig/hipchat
 %define install_base /usr/local
 %define install_bin_dir %{install_base}/bin
+%define install_sbin_dir %{install_base}/sbin
 %define real_name icg-docker-build
+%define hipchat_script hipchat_room_message
+%define container_cleanup_real_name docker-container-cleanup
 
 Source0: ~/rpmbuild/SOURCES/%{real_name}.sh
+Source1: ~/rpmbuild/SOURCES/%{hipchat_script}.sh
+Source2: ~/rpmbuild/SOURCES/%{container_cleanup_real_name}.sh
+Source3: ~/rpmbuild/SOURCES/docker_cleanup.conf
 
 %description
 icg-docker-build is a helper script to build a docker image from
@@ -55,6 +62,11 @@ rm -rf %{buildroot}
 # Populate %{buildroot}
 mkdir -p %{buildroot}%{install_bin_dir}
 cp %{SOURCE0} %{buildroot}%{install_bin_dir}/%{real_name}
+cp %{SOURCE1} %{buildroot}%{install_bin_dir}/%{hipchat_script}
+mkdir -p %{buildroot}%{install_bin_dir}
+cp %{SOURCE2} %{buildroot}%{install_sbin_dir}/%{container_cleanup_real_name}
+mkdir -p %{buildroot}%{etc_sysconfig}
+cp %{SOURCE3} %{buildroot}%{etc_sysconfig}
 
 # Build packaging manifest
 rm -rf /tmp/MANIFEST.%{name}* > /dev/null 2>&1
@@ -81,6 +93,10 @@ rm -f /tmp/MANIFEST.%{name}.tmp
 chmod 666 /tmp/MANIFEST.%{name}
 
 %post
+if [ "${1}" = "1" ]; then
+    echo "# Docker Container Cleansing" >> /var/spool/cron/root
+    echo "30 0 * * * ( %{install_sbin_dir}/%{container_cleanup_real_name} 2>&1 | logger -t \"Docker Container Cleansing\" )" >> /var/spool/cron/root
+fi
 chown root:docker %{install_bin_dir}/%{real_name}
 chmod 750 %{install_bin_dir}/%{real_name}
 if [ ! -d /usr/local/src ]; then
@@ -92,11 +108,18 @@ if [ ! -d /usr/local/src/DOCKER ]; then
 fi
 chmod 770 /usr/local/src/DOCKER
 chown -R root:docker /usr/local/src/DOCKER
+service crontab restart > /dev/null 2>&1
+/bin/true
 
 %postun
-if [ -d /usr/local/src/DOCKER ]; then
-    rm -rf /usr/local/src/DOCKER
+if [ "${1}" = "0" ]; then
+    sed -i -e "/Docker Container Cleansing/d" /var/spool/cron/root
+    if [ -d /usr/local/src/DOCKER ]; then
+        rm -rf /usr/local/src/DOCKER
+    fi
 fi
+service crontab restart > /dev/null 2>&1
+/bin/true
 
 %files -f /tmp/MANIFEST.%{name}
 

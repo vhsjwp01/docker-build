@@ -79,6 +79,7 @@
 #                                        back tick assignment operations.
 # 20160215     Jason W. Plummer          Fixed error introduced by modifications
 #                                        made on 20160107
+# 20160708     Jason W. Plummer          Added BITBUCKET_BASE_URI check
 
 ################################################################################
 # DESCRIPTION
@@ -141,6 +142,7 @@ ERROR=1
 
 GIT_CHECKOUT_BASE="/usr/local/src/DOCKER"
 STASH_BASE_URI="ssh://git@stash.ingramcontent.com:7999"
+BITBUCKET_BASE_URI="ssh://git@bitbucket.ingramcontent.com:7999"
 
 # Example clone from Stash:
 # git clone ssh://git@stash.ingramcontent.com:7999/docker/passenger-nginx-rbenv.git
@@ -468,8 +470,6 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # SSH STYLE:  git@github.com:vitalsource/vst-client.git
     # HTTP STYLE: https://github.com/vitalsource/vst-client.git
     if [ "${github_project}" != "" ]; then
-
-
         let http_style=$(echo "${github_project}" | ${my_egrep} -ci "^https://")
 
         if [ ${http_style} -gt 0 ]; then
@@ -514,7 +514,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # See if we were passed a fully qualified stash URL
     # Example: ssh://git@stash.ingramcontent.com:7999/wad/prodstatdev.git
     if [ "${stash_project}" != "" ]; then
-        let stash_url_check=$(echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}")
+        let stash_url_check=$(echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}|^${BITBUCKET_BASE_URI}")
 
         # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
         if [ ${stash_url_check} -gt 0 ]; then
