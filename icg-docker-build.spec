@@ -127,4 +127,3 @@ service crontab restart > /dev/null 2>&1
 %define today %( date +%a" "%b" "%d" "%Y )
 * %{today} %{rpm_author} <%{rpm_author_email}>
 - built version %{version} for %{distro_id} %{distro_ver}
-
