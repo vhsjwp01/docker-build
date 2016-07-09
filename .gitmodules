@@ -3,4 +3,4 @@
 	url = ssh://git@stash.ingramcontent.com:7999/rpm/rpm-build-script.git
 [submodule "hipchat-cli"]
 	path = hipchat-cli
-	url = http://github.com/hipchat/hipchat-cli
+	url = https://github.com/hipchat/hipchat-cli
