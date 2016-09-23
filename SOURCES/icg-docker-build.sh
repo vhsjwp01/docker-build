@@ -80,6 +80,7 @@
 # 20160215     Jason W. Plummer          Fixed error introduced by modifications
 #                                        made on 20160107
 # 20160708     Jason W. Plummer          Added BITBUCKET_BASE_URI check
+# 20160922     Jason W. Plummer          Added $$ to temporary SRC directory
 
 ################################################################################
 # DESCRIPTION
@@ -140,7 +141,7 @@ export TERM PATH
 SUCCESS=0
 ERROR=1
 
-GIT_CHECKOUT_BASE="/usr/local/src/DOCKER"
+GIT_CHECKOUT_BASE="/usr/local/src/DOCKER/$(date +%Y%m%d%H%M%S)-$$"
 STASH_BASE_URI="ssh://git@stash.ingramcontent.com:7999"
 BITBUCKET_BASE_URI="ssh://git@bitbucket.ingramcontent.com:7999"
 

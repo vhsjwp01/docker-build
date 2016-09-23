@@ -9,7 +9,7 @@
 
 Summary: A Docker build framework tailored for git based projects
 Name: icg-docker-build
-Release: 18.EL%{distro_major_ver}
+Release: 19.EL%{distro_major_ver}
 License: GNU
 Group: Docker/Development
 BuildRoot: %{_tmppath}/%{name}-root
@@ -46,12 +46,12 @@ Requires: jq
 %define install_sbin_dir %{install_base}/sbin
 %define real_name icg-docker-build
 %define hipchat_script hipchat_room_message
-%define container_cleanup_real_name docker-cleanup
+%define container_cleanup_real_name docker-tidy
+%define build_cleanup_real_name icg-docker-cleanup
 
 Source0: ~/rpmbuild/SOURCES/%{real_name}.sh
-Source1: ~/rpmbuild/SOURCES/%{hipchat_script}
-Source2: ~/rpmbuild/SOURCES/%{container_cleanup_real_name}.sh
-Source3: ~/rpmbuild/SOURCES/docker_cleanup.conf
+Source1: ~/rpmbuild/SOURCES/%{container_cleanup_real_name}.sh
+Source2: ~/rpmbuild/SOURCES/%{icg-docker-cleanup}.sh
 
 %description
 icg-docker-build is a helper script to build a docker image from
@@ -62,12 +62,9 @@ rm -rf %{buildroot}
 # Populate %{buildroot}
 mkdir -p %{buildroot}%{install_bin_dir}
 cp %{SOURCE0} %{buildroot}%{install_bin_dir}/%{real_name}
-cp %{SOURCE1} %{buildroot}%{install_bin_dir}/%{hipchat_script}
 mkdir -p %{buildroot}%{install_sbin_dir}
-cp %{SOURCE2} %{buildroot}%{install_sbin_dir}/%{container_cleanup_real_name}
-mkdir -p %{buildroot}%{etc_sysconfig}
-cp %{SOURCE3} %{buildroot}%{etc_sysconfig}
-
+cp %{SOURCE1} %{buildroot}%{install_sbin_dir}/%{container_cleanup_real_name}
+cp %{SOURCE2} %{buildroot}%{install_sbin_dir}/%{build_cleanup_real_name}
 # Build packaging manifest
 rm -rf /tmp/MANIFEST.%{name}* > /dev/null 2>&1
 echo '%defattr(-,root,root)' > /tmp/MANIFEST.%{name}
@@ -94,8 +91,10 @@ chmod 666 /tmp/MANIFEST.%{name}
 
 %post
 if [ "${1}" = "1" ]; then
-    echo "# Docker Container Cleansing" >> /var/spool/cron/root
-    echo "30 0 * * * ( %{install_sbin_dir}/%{container_cleanup_real_name} 2>&1 | logger -t \"Docker Container Cleansing\" )" >> /var/spool/cron/root
+    echo "# Docker Build Container Cleansing" >> /var/spool/cron/root
+    echo "30 0 * * 6 ( %{install_sbin_dir}/%{container_cleanup_real_name} force 2>&1 | logger -t \"Docker Build Container Cleansing\" )" >> /var/spool/cron/root
+    echo "# Docker Build Remnant Cleansing" >> /var/spool/cron/root
+    echo "30 2 * * 6 ( %{install_sbin_dir}/%{build_cleanup_real_name} 2>&1 | logger -t \"Docker Build Remnant Cleansing\" )" >> /var/spool/cron/root
 fi
 chown root:docker %{install_bin_dir}/%{real_name}
 chmod 750 %{install_bin_dir}/%{real_name}
@@ -113,7 +112,8 @@ service crontab restart > /dev/null 2>&1
 
 %postun
 if [ "${1}" = "0" ]; then
-    sed -i -e "/Docker Container Cleansing/d" /var/spool/cron/root
+    sed -i -e "/Docker Build Container Cleansing/d" /var/spool/cron/root
+    sed -i -e "/Docker Build Remnant Cleansing/d" /var/spool/cron/root
     if [ -d /usr/local/src/DOCKER ]; then
         rm -rf /usr/local/src/DOCKER
     fi
