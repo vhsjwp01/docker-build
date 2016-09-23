@@ -51,7 +51,7 @@ Requires: jq
 
 Source0: ~/rpmbuild/SOURCES/%{real_name}.sh
 Source1: ~/rpmbuild/SOURCES/%{container_cleanup_real_name}.sh
-Source2: ~/rpmbuild/SOURCES/%{icg-docker-cleanup}.sh
+Source2: ~/rpmbuild/SOURCES/%{build_cleanup_real_name}.sh
 
 %description
 icg-docker-build is a helper script to build a docker image from
