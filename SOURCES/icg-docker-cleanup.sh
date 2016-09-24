@@ -14,5 +14,5 @@ my_logger=$(unalias logger > /dev/null 2>&1 ; which logger 2> /dev/null)
 
 if [ "${my_rm}" != "" -a "${my_logger}" != "" -a -d "${DOCKER_BUILD_DIR}" ]; then
     echo "Removing temporary build directories from ${DOCKER_BUILD_DIR} more than 30 days old ... "
-    eval "find ${DOCKER_BUILD_DIR} -type d -maxdepth 1 -ctime +${max_age} -print -exec ${my_rm} -rf {} \;"
+    eval "find ${DOCKER_BUILD_DIR} -maxdepth 1 -type d -mtime +${max_age} -print -exec ${my_rm} -rf {} \;"
 fi
