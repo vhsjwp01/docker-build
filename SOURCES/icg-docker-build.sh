@@ -81,6 +81,8 @@
 #                                        made on 20160107
 # 20160708     Jason W. Plummer          Added BITBUCKET_BASE_URI check
 # 20160922     Jason W. Plummer          Added $$ to temporary SRC directory
+# 20161024     Jason W. Plummer          Added catch for presence of -f switch
+#                                        in docker tag operations
 
 ################################################################################
 # DESCRIPTION
@@ -908,7 +910,15 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
                 if [ ${remote_tag_check} -eq 0 ]; then
                     echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
-                    ${my_docker} tag -f ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
+
+                    tag_arg=""
+                    minus_f=$(${my_docker} tag --help 2> /dev/null | egrep -c "\-f,")
+
+                    if [ ${minus_f} -gt 0 ]; then
+                        tag_arg="-f"
+                    fi
+
+                    ${my_docker} tag ${tag_arg} ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
                     ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
                 else
                     echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
