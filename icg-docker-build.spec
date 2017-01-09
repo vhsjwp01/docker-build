@@ -9,7 +9,7 @@
 
 Summary: A Docker build framework tailored for git based projects
 Name: icg-docker-build
-Release: 21.EL%{distro_major_ver}
+Release: 22.EL%{distro_major_ver}
 License: GNU
 Group: Docker/Development
 BuildRoot: %{_tmppath}/%{name}-root

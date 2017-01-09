@@ -83,6 +83,7 @@
 # 20160922     Jason W. Plummer          Added $$ to temporary SRC directory
 # 20161024     Jason W. Plummer          Added catch for presence of -f switch
 #                                        in docker tag operations
+# 20170109     Jason W. Plummer          Fixed bad submodule initialization
 
 ################################################################################
 # DESCRIPTION
@@ -341,7 +342,7 @@ f__git_operation() {
 
                             # Try to checkout the branch name we were passed, otherwise fall back to the master branch for the submodule
                             for this_submodule in ${these_submodules} ; do
-                                cd "${GIT_CHECKOUT_BASE}/${base_scm_dir}/${this_submodule}" && ${my_git} ${this_git_action} ${this_branch} || ${my_git} ${this_git_action} master
+                                cd "${GIT_CHECKOUT_BASE}/${stash_project}/${base_scm_dir}/${this_submodule}" && ${my_git} ${this_git_action} ${this_branch} || ${my_git} ${this_git_action} master
                             done
 
                         done
