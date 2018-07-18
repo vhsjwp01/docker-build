@@ -8,12 +8,12 @@
 %define distro_major_ver %( echo "%{distro_ver}" | awk -F'.' '{print $1}' )
 
 Summary: A Docker build framework tailored for git based projects
-Name: icg-docker-build
+Name: docker-build
 Release: 22.EL%{distro_major_ver}
 License: GNU
 Group: Docker/Development
 BuildRoot: %{_tmppath}/%{name}-root
-URL: https://stash.ingramcontent.com/projects/RPM/repos/icg-docker-build/browse
+URL: https://stash.ingramcontent.com/projects/RPM/repos/docker-build/browse
 Version: 1.0
 BuildArch: noarch
 
@@ -44,17 +44,17 @@ Requires: jq
 %define install_base /usr/local
 %define install_bin_dir %{install_base}/bin
 %define install_sbin_dir %{install_base}/sbin
-%define real_name icg-docker-build
+%define real_name docker-build
 %define hipchat_script hipchat_room_message
 %define container_cleanup_real_name docker-tidy
-%define build_cleanup_real_name icg-docker-cleanup
+%define build_cleanup_real_name docker-cleanup
 
 Source0: ~/rpmbuild/SOURCES/%{real_name}.sh
 Source1: ~/rpmbuild/SOURCES/%{container_cleanup_real_name}.sh
 Source2: ~/rpmbuild/SOURCES/%{build_cleanup_real_name}.sh
 
 %description
-icg-docker-build is a helper script to build a docker image from
+docker-build is a helper script to build a docker image from
 a git controlled SCM repo containing a Dockerfile
 
 %install
