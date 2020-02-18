@@ -42,7 +42,7 @@
 # 20150127     Jason W. Plummer          Added more embedded code execution
 #                                        protection for command line args
 # 20150128     Jason W. Plummer          Added support for passing a fully 
-#                                        qualified stash project uri.  Fixed
+#                                        qualified project source uri.  Fixed
 #                                        check for Dockerfile before building
 # 20150129     Jason W. Plummer          Added current date in YYYYMMDDHHMMSS
 #                                        format to docker image tag when the
@@ -90,10 +90,10 @@
 ################################################################################
 #
 
-# NAME: icg-docker-build
+# NAME: docker-build
 # 
-# This script performs a checkout of a stash based Docker project and attempts
-# to build the docker image in question using the project's Dockerfile
+# This script performs a checkout of a Docker based source code project and 
+# attempts to build the docker image in question using the project's Dockerfile
 #
 # OPTIONS:
 #
@@ -101,26 +101,9 @@
 #                            docker registry.  This argument is OPTIONAL.
 # --docker_namespace       - The namespace to use as a first level identifier 
 #                            of the docker image created.  Defaults to 
-#                            "ingramcontent".  This argument is OPTIONAL.
-# --stash_project          - The Stash project name (both with or without the 
-#                            .git suffix.  DO NOT USE THE FULLY QUALIFIED GIT 
-#                            CHECKOUT URI FOR THIS OPTION.  This argument is 
-#                            REQUIRED **UNLESS** --personal_stash_project is 
-#                            provided.
+#                            "${USER}".  This argument is OPTIONAL.
 # --git_branch             - The git branch upon which build operations are to 
 #                            be performed.  This argument is REQUIRED.
-# --personal_stash_project - The fully qualified git checkout URI from Stash
-#                            for a personal project.  Setting this option has
-#                            the following affect on environment variables:
-#
-#                            * STASH_BASE_URI is set using the ~ as the 
-#                              delimiter
-#                            * docker_namespace is set using the username after
-#                              the ~
-#                            * stash_project is set using the remaining portion
-#                              of the string after the username
-#
-# --github_project         - The fully qualified git checkout GitHub URL
 # --docker_build_args      - Extra build arguments to be passed to the docker
 #                            build process.  This argument is OPTIONAL
 # --registry_namespace     - The namespace to use when pushing to a docker
@@ -145,12 +128,6 @@ SUCCESS=0
 ERROR=1
 
 GIT_CHECKOUT_BASE="/usr/local/src/DOCKER/$(date +%Y%m%d%H%M%S)-$$"
-STASH_BASE_URI="ssh://git@stash.ingramcontent.com:7999"
-BITBUCKET_BASE_URI="ssh://git@bitbucket.ingramcontent.com:7999"
-
-# Example clone from Stash:
-# git clone ssh://git@stash.ingramcontent.com:7999/docker/passenger-nginx-rbenv.git
-# ${my_git} ${my_git_action} ${STASH_BASE_URI}/${stash_project_repo}
 
 STDOUT_OFFSET="    "
 
@@ -163,11 +140,9 @@ USAGE="${USAGE}[ --docker_build_args <extra arguments to the docker build comman
 USAGE="${USAGE}[ --docker_registry <fully qualified URL of remote docker registry server *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --docker_namespace <string 4-30 characters in length *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --git_branch <git branch to checkout *REQUIRED*> ]${USAGE_ENDLINE}"
-USAGE="${USAGE}[ --personal_stash_project <fully qualified Git URI for checkout from Stash *SUPERCEDES --stash_project*> ]${USAGE_ENDLINE}"
-USAGE="${USAGE}[ --github_project <fully qualified URL for checkout from GitHub *SUPERCEDES --stash_project*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --registry_namespace <namespace to use when pushing to a registry *OPTIONAL*> ]${USAGE_ENDLINE}"
 USAGE="${USAGE}[ --registry_tag <image tag to use when pushing to a registry *OPTIONAL*> ]${USAGE_ENDLINE}"
-USAGE="${USAGE}[ --stash_project <name of Stash project *REQUIRED*> ]"
+USAGE="${USAGE}[ --source_uri <fully qualified SCM URI *REQUIRED*> ]${USAGE_ENDLINE}"
 
 ################################################################################
 # VARIABLES
@@ -179,7 +154,7 @@ exit_code=${SUCCESS}
 
 container_id=""
 docker_image_tag=""
-default_docker_namespace="ingramcontent"
+default_docker_namespace="${USER}"
 is_release=0
 
 ################################################################################
@@ -223,9 +198,9 @@ f__check_command() {
 #       the Stash project in question ( passed as "${2}" ).  All git operations 
 #       are performed in the following location:
 #
-#           ${GIT_CHECKOUT_BASE}/${stash_project}
+#           ${GIT_CHECKOUT_BASE}/${source_uri}
 #
-# NOTE: The directory ${GIT_CHECKOUT_BASE}/${stash_project} is always flushed
+# NOTE: The directory ${GIT_CHECKOUT_BASE}/${source_uri} is always flushed
 #       before the start of operaitons to ensure concurrency
 #
 f__git_operation() {
@@ -238,10 +213,10 @@ f__git_operation() {
 
             branch)
 
-                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${stash_project}" != "" -a -d "${GIT_CHECKOUT_BASE}/${stash_project}" ]; then
+                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${source_uri}" != "" -a -d "${GIT_CHECKOUT_BASE}/${source_uri}" ]; then
 
                     if [ "${2}" = "" ]; then
-                        cd "${GIT_CHECKOUT_BASE}/${stash_project}"
+                        cd "${GIT_CHECKOUT_BASE}/${source_uri}"
                         git_branch=$(${my_git} ${this_git_action} 2> /dev/null | ${my_egrep} "^\*" | ${my_awk} '{print $NF}')
                     else
                         new_branch="${2}"
@@ -258,25 +233,26 @@ f__git_operation() {
             clone)
 
                 if [ "${GIT_CHECKOUT_BASE}" != "" -a "${2}" != "" ]; then
-                    this_stash_project_repo="${2}"
-                    this_stash_project=$(echo "${this_stash_project_repo}" | ${my_sed} -e 's/\.git$//g')
+                    this_project_repo="${2}"
+                    this_source_base_uri=$(dirname "${this_project_repo}")
+                    this_project=$(basename "${this_project_repo}" | ${my_sed} -e 's|\.git$||g')
 
-                    if [ -d "${GIT_CHECKOUT_BASE}/${this_stash_project}" ]; then
-                        ${my_rm} -rf "${GIT_CHECKOUT_BASE}/${this_stash_project}"
+                    if [ -d "${GIT_CHECKOUT_BASE}/${this_project}" ]; then
+                        ${my_rm} -rf "${GIT_CHECKOUT_BASE}/${this_project}"
                     fi
 
                     if [ ! -d "${GIT_CHECKOUT_BASE}" ]; then
                         ${my_mkdir} -p "${GIT_CHECKOUT_BASE}"
                     fi
          
-                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of ${STASH_BASE_URI}/${this_stash_project_repo}"
-                    cd "${GIT_CHECKOUT_BASE}" && ${my_git} ${this_git_action} ${STASH_BASE_URI}/${this_stash_project_repo} &&
+                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of ${this_source_base_uri}/${this_project_repo}"
+                    cd "${GIT_CHECKOUT_BASE}" && ${my_git} ${this_git_action} ${this_source_base_uri}/${this_project_repo} &&
 
                     # Perform a git fetch --all to grab all refs, and a git pull --all to slurp down all branches
-                    cd "${GIT_CHECKOUT_BASE}/${this_stash_project}" && ${my_git} fetch --all && ${my_git} pull --all &&
+                    cd "${GIT_CHECKOUT_BASE}/${this_project}" && ${my_git} fetch --all && ${my_git} pull --all &&
 
                     # Initialize any submodules
-                    if [ -e "${GIT_CHECKOUT_BASE}/${this_stash_project}/.gitmodules" ]; then
+                    if [ -e "${GIT_CHECKOUT_BASE}/${this_project}/.gitmodules" ]; then
                         ${my_git} submodule update --init --recursive &&
                         ${my_git} submodule foreach --recursive ${my_git} fetch
                     fi
@@ -290,7 +266,7 @@ f__git_operation() {
 
             checkout)
 
-                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${stash_project}" != "" -a "${2}" != "" ]; then
+                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${source_uri}" != "" -a "${2}" != "" ]; then
                     this_branch="${2}"
 
                     # Fetch all tags as they may be needed later
@@ -309,7 +285,7 @@ f__git_operation() {
                     fi
 
                     # See if this branch exists
-                    cd "${GIT_CHECKOUT_BASE}/${stash_project}"
+                    cd "${GIT_CHECKOUT_BASE}/${source_uri}"
                     let branch_check=$(${my_git} branch -a | ${my_egrep} -c "origin/${this_branch}$")
 
                     # If ${this_branch} cannot be found then see if we were passed a tag
@@ -328,8 +304,8 @@ f__git_operation() {
                         this_branch="master"
                     fi
             
-                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of branch ${this_branch} in repo ${stash_project}"
-                    cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_branch}
+                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of branch ${this_branch} in repo ${source_uri}"
+                    cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_git} ${this_git_action} ${this_branch}
 
                     # Find our submodules and perform git checkout against them
                     submodule_files=$(${my_find} . -depth -type f -name ".gitmodules")
@@ -342,14 +318,14 @@ f__git_operation() {
 
                             # Try to checkout the branch name we were passed, otherwise fall back to the master branch for the submodule
                             for this_submodule in ${these_submodules} ; do
-                                cd "${GIT_CHECKOUT_BASE}/${stash_project}/${base_scm_dir}/${this_submodule}" && ${my_git} ${this_git_action} ${this_branch} || ${my_git} ${this_git_action} master
+                                cd "${GIT_CHECKOUT_BASE}/${source_uri}/${base_scm_dir}/${this_submodule}" && ${my_git} ${this_git_action} ${this_branch} || ${my_git} ${this_git_action} master
                             done
 
                         done
 
-                        # If all went well, set us back in the top level directory of the stash project
+                        # If all went well, set us back in the top level directory of the project
                         if [ ${?} -eq ${SUCCESS} ]; then
-                            cd "${GIT_CHECKOUT_BASE}/${stash_project}"
+                            cd "${GIT_CHECKOUT_BASE}/${source_uri}"
                         fi
 
                     fi
@@ -363,11 +339,11 @@ f__git_operation() {
 
             rev-parse)
 
-                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${stash_project}" != "" -a -d "${GIT_CHECKOUT_BASE}/${stash_project}" -a "${2}" != "" -a "${3}" != "" ]; then
+                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${source_uri}" != "" -a -d "${GIT_CHECKOUT_BASE}/${source_uri}" -a "${2}" != "" -a "${3}" != "" ]; then
                     this_git_extra_args="${2}"
                     this_git_ref="${3}"
                     right_now=$(${my_date} +%Y%m%d%H%M%S)
-                    docker_image_tag=$(cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref})
+                    docker_image_tag=$(cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref})
                     docker_image_tag="${right_now}.${git_branch}.${docker_image_tag}"
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
@@ -420,7 +396,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         case "${key}" in
 
-            --config|--docker_build_args|--docker_namespace|--docker_registry|--git_branch|--personal_stash_project|--registry_namespace|--registry_tag|--stash_project|--github_project)
+            --config|--docker_build_args|--docker_namespace|--docker_registry|--git_branch|--registry_namespace|--registry_tag|--source_uri)
                 key=$(echo "${key}" | ${my_sed} -e 's?^--??g')
 
                 if [ "${value}" != "" ]; then
@@ -455,82 +431,6 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             exit
         else
             source "${config}"
-        fi
-
-    fi
-
-    # If we were passed --personal_stash_project, then parse that and redefine
-    # STASH_BASE_URI, stash_project, and docker_namespace
-    # ssh://git@stash.ingramcontent.com:7999/~ptinsley/prodstatdev.git
-    if [ "${personal_stash_project}" != "" ]; then
-        stash_base_uri=$(echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $1}' | ${my_sed} -e 's?/$??g')
-        docker_namespace=$(echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $1}')
-        stash_project=$(echo "${personal_stash_project}" | ${my_awk} -F'~' '{print $2}' | ${my_awk} -F'/' '{print $NF}')
-        STASH_BASE_URI="${stash_base_uri}/~${docker_namespace}"
-    fi
-
-    # If we were passed --github_project, then parse that and redefine
-    # STASH_BASE_URI, stash_project, and docker_namespace
-    # SSH STYLE:  git@github.com:vitalsource/vst-client.git
-    # HTTP STYLE: https://github.com/vitalsource/vst-client.git
-    if [ "${github_project}" != "" ]; then
-        let http_style=$(echo "${github_project}" | ${my_egrep} -ci "^https://")
-
-        if [ ${http_style} -gt 0 ]; then
-
-            # WHAT: If ${GITHUB_USER} and ${GITHUB_PASSWORD} is defined, then 
-            #       use them later for github project URL construction
-            # WHY:  Needed for github automation via authenticated URL
-            #
-    
-            # Detect github user passed in as bamboo variable
-            if [ "${bamboo_github_user}" != "" ]; then
-                echo "Detected GitHub user from Bamboo"
-                GITHUB_USER="${bamboo_github_user}"
-            fi
-    
-            # Detect github password passed in as bamboo variable
-            if [ "${bamboo_github_password}" != "" ]; then
-                echo "Detected GitHub password from Bamboo"
-                GITHUB_PASSWORD="${bamboo_github_password}"
-            fi
-
-            stash_base_uri=$(echo "${github_project}" | ${my_sed} -e 's?^http://??g' -e 's?^https://??g' | ${my_awk} -F'/' '{print $1}')
-
-            if [ "${GITHUB_USER}" != "" -a "${GITHUB_PASSWORD}" != "" ]; then
-                stash_base_uri="https://${GITHUB_USER}:${GITHUB_PASSWORD}@${stash_base_uri}"
-            else
-                stash_base_uri="https://${stash_base_uri}"
-            fi
-
-            docker_namespace=$(echo "${github_project}" | ${my_awk} -F'/' '{print $4}')
-            stash_project=$(echo "${github_project}" | ${my_awk} -F'/' '{print $NF}')
-            STASH_BASE_URI="${stash_base_uri}/${docker_namespace}"
-        else
-            stash_base_uri=$(echo "${github_project}" | ${my_awk} -F'/' '{print $1}' | ${my_awk} -F':' '{print $1}')
-            docker_namespace=$(echo "${github_project}" | ${my_awk} -F':' '{print $2}' | ${my_awk} -F'/' '{print $1}')
-            stash_project=$(echo "${github_project}" | ${my_awk} -F'/' '{print $NF}')
-            STASH_BASE_URI="${stash_base_uri}:${docker_namespace}"
-        fi
-
-    fi
-
-    # See if we were passed a fully qualified stash URL
-    # Example: ssh://git@stash.ingramcontent.com:7999/wad/prodstatdev.git
-    if [ "${stash_project}" != "" ]; then
-        let stash_url_check=$(echo "${stash_project}" | ${my_egrep} -ci "^${STASH_BASE_URI}|^${BITBUCKET_BASE_URI}")
-
-        # If so, let's redefine STASH_BASE_URI, stash_project, and docker_namespace
-        if [ ${stash_url_check} -gt 0 ]; then
-            real_stash_project=$(echo "${stash_project}" | ${my_awk} -F'/' '{print $NF}')
-            stash_base_uri=$(echo "${stash_project}" | ${my_sed} -e "s?/${real_stash_project}\$??g")
-
-            if [ "${docker_namespace}" = "" ]; then
-                docker_namespace=$(echo "${stash_base_uri}" | ${my_awk} -F'/' '{print $NF}')
-            fi
-
-            stash_project="${real_stash_project}"
-            STASH_BASE_URI="${stash_base_uri}"
         fi
 
     fi
@@ -601,31 +501,31 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     fi
 
-    if [ "${stash_project}" != "" -a "${git_branch}" != "" ]; then
+    if [ "${source_uri}" != "" -a "${git_branch}" != "" ]; then
 
-        # Make sure stash project name is sane (stash project repo name should end in .git"
-        git_suffix_check=$(echo "${stash_project}" | ${my_egrep} -c "\.git$")
+        # Make sure project name is sane (project repo name should end in .git"
+        git_suffix_check=$(echo "${source_uri}" | ${my_egrep} -c "\.git$")
 
         if [ ${git_suffix_check} -eq 0 ]; then
-            stash_project_repo="${stash_project}.git"
+            project_repo="${source_uri}.git"
         else
-            stash_project_repo="${stash_project}"
-            stash_project=$(echo "${stash_project}" | ${my_sed} -e 's/\.git$//g')
+            project_repo="${source_uri}"
+            project=$(echo "${source_uri}" | ${my_sed} -e 's/\.git$//g')
         fi
 
     else
-        echo "${STDOUT_OFFSET}ERROR:  Not enough arguments provided.  Arguments --stash_project and --git_branch must be defined"
+        echo "${STDOUT_OFFSET}ERROR:  Not enough arguments provided.  Arguments --source_uri and --git_branch must be defined"
         exit_code=${ERROR}
     fi
 
 fi
 
-# WHAT: Checkout the stash project
+# WHAT: Checkout the project
 # WHY:  Asked to
 #
 if [ ${exit_code} -eq ${SUCCESS} ]; then
     my_git_action="clone"
-    f__git_operation ${my_git_action} ${stash_project_repo}
+    f__git_operation ${my_git_action} ${project_repo}
     exit_code=${?}
 fi
 
@@ -655,11 +555,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     # Setup logging
     if [ "${bamboo_working_directory}" != "" ]; then
-        artifact_file="${bamboo_working_directory}/${stash_project}.dockerbuild.log"
-        env_file="${bamboo_working_directory}/${stash_project}.env"
+        artifact_file="${bamboo_working_directory}/${source_uri}.dockerbuild.log"
+        env_file="${bamboo_working_directory}/${source_uri}.env"
     else
-        artifact_file="/tmp/${stash_project}.dockerbuild.log"
-        env_file="/tmp/${stash_project}.env"
+        artifact_file="/tmp/${source_uri}.dockerbuild.log"
+        env_file="/tmp/${source_uri}.env"
     fi
 
     echo "Starting build $(${my_date})" | ${my_tee} "${artifact_file}"
@@ -684,7 +584,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # Pick up SSH keys and make them real
     if [ "${SSH_PUB_KEY}" != "" -a "${SSH_PRIV_KEY}" != "" ]; then
         echo "Detected SSH public and private keys from ENV" | ${my_tee} -a "${artifact_file}"
-        target_dir="${GIT_CHECKOUT_BASE}/${stash_project}/ssh"
+        target_dir="${GIT_CHECKOUT_BASE}/${source_uri}/ssh"
 
         # Create the ssh directory if it is absent
         if [ ! -d "${target_dir}" ]; then
@@ -718,24 +618,24 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     #    ASSUMPTIONS:
     #        (1) There is a build target named "build" which builds *AND* tags the docker image
     #        (2) There is a build target named "push" which pushes the docker image to the registry
-    if [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Makefile" ]; then
+    if [ -e "${GIT_CHECKOUT_BASE}/${source_uri}/Makefile" ]; then
         my_make=$(which make 2> /dev/null)
 
         if [ "${my_make}" != "" ]; then
             let build_directive=$(${my_make} -qpn | ${my_egrep} "^build:" | ${my_wc} -l | ${my_awk} '{print $1}')
 
             if [ ${build_directive} -gt 0 ]; then
-                echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Makefile ... see ${artifact_file} for status"
-                cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} build 2>&1 | ${my_tee} -a "${artifact_file}"
+                echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${source_uri}/Makefile ... see ${artifact_file} for status"
+                cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_make} build 2>&1 | ${my_tee} -a "${artifact_file}"
                 exit_code=${?}
 
                 if [ ${exit_code} -ne ${SUCCESS} ]; then
-                    err_msg="Build of Docker image ${stash_project} failed"
+                    err_msg="Build of Docker image ${source_uri} failed"
                 else
                     container_id=$(${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}')
 
                     if [ "${container_id}" = "" ]; then
-                        err_msg="Failed to determine container id after building docker image ${stash_project}"
+                        err_msg="Failed to determine container id after building docker image ${source_uri}"
                         exit_code=${ERROR}
                     fi
 
@@ -749,25 +649,25 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         fi
 
     # Build using a Dockerfile
-    elif [ -e "${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile" ]; then
-        echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${stash_project}/Dockerfile ... see ${artifact_file} for status"
-        cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_docker} build ${docker_build_args} . 2>&1 | ${my_tee} -a  "${artifact_file}"
+    elif [ -e "${GIT_CHECKOUT_BASE}/${source_uri}/Dockerfile" ]; then
+        echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${source_uri}/Dockerfile ... see ${artifact_file} for status"
+        cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_docker} build ${docker_build_args} . 2>&1 | ${my_tee} -a  "${artifact_file}"
         exit_code=${?}
 
         if [ ${exit_code} -ne ${SUCCESS} ]; then
-            err_msg="Build of Docker image ${stash_project} failed"
+            err_msg="Build of Docker image ${source_uri} failed"
         else
             container_id=$(${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}')
 
             if [ "${container_id}" = "" ]; then
-                err_msg="Failed to determine container id after building docker image ${stash_project}"
+                err_msg="Failed to determine container id after building docker image ${source_uri}"
                 exit_code=${ERROR}
             fi
 
         fi
 
     else
-        err_msg="Could locate neither a Makefile nor Dockerfile in directory \"${GIT_CHECKOUT_BASE}/${stash_project}\""
+        err_msg="Could locate neither a Makefile nor Dockerfile in directory \"${GIT_CHECKOUT_BASE}/${source_uri}\""
         exit_code=${ERROR}
     fi
 
@@ -811,13 +711,13 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         docker_image_tag=$(echo "${docker_image_tag}" | ${my_sed} -e 's?/?\-?g')
 
         local_image_change="no"
-        let local_image_check=$(${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${stash_project}:${docker_image_tag}$")
+        let local_image_check=$(${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${source_uri}:${docker_image_tag}$")
 
         # Only perform a local tag if the image is absent from the local registry
         if [ ${local_image_check} -eq 0 ]; then
             local_image_change="yes"
-            echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${stash_project}:${docker_image_tag}" | ${my_tee} -a "${artifact_file}"
-            ${my_docker} tag ${container_id} ${docker_namespace}/${stash_project}:${docker_image_tag}
+            echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${source_uri}:${docker_image_tag}" | ${my_tee} -a "${artifact_file}"
+            ${my_docker} tag ${container_id} ${docker_namespace}/${source_uri}:${docker_image_tag}
             exit_code=${?}
 
             if [ ${exit_code} -ne ${SUCCESS} ]; then
@@ -825,7 +725,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             fi
 
         else
-            echo "Docker local image tag ${docker_namespace}/${stash_project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
+            echo "Docker local image tag ${docker_namespace}/${source_uri}:${docker_image_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
         fi
 
     fi
@@ -843,11 +743,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         if [ ${build_directive} -gt 0 ]; then
             echo "Pushing image to remote registry" | ${my_tee} -a "${artifact_file}"
-            cd "${GIT_CHECKOUT_BASE}/${stash_project}" && ${my_make} push 2>&1 | ${my_tee} -a "${artifact_file}"
+            cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_make} push 2>&1 | ${my_tee} -a "${artifact_file}"
             exit_code=${?}
 
             if [ ${exit_code} -ne ${SUCCESS} ]; then
-                err_msg="Push of Docker image ${stash_project} failed"
+                err_msg="Push of Docker image ${source_uri} failed"
             fi
 
         else
@@ -877,28 +777,28 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
             remote_image_change="no"
             let remote_tag_check=0
-            let remote_image_check=$(${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".num_results")
+            let remote_image_check=$(${my_curl} ${docker_registry_url}/v1/search?q=${source_uri} 2> /dev/null | ${my_jq} ".num_results")
 
             # Only perform a remote tag and push if the image is absent from the registry server
             if [ ${remote_image_check} -eq 0 ]; then
                 remote_image_change="yes"
-                remote_image_name="${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}"
-                echo "Adding new image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
-                ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
-                ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
+                remote_image_name="${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}"
+                echo "Adding new image ${docker_namespace}/${source_uri}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
+                ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag} &&
+                ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}
             else
                 # JSON results use zero based indexing
                 let remote_image_counter=${remote_image_check}-1
 
                 while [ ${remote_image_counter} -ge 0 ]; do
-                    this_image_name=$(${my_curl} ${docker_registry_url}/v1/search?q=${stash_project} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g')
+                    this_image_name=$(${my_curl} ${docker_registry_url}/v1/search?q=${source_uri} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g')
 
-                    if [ "${this_image_name}" = "${remote_namespace}/${stash_project}" ]; then
+                    if [ "${this_image_name}" = "${remote_namespace}/${source_uri}" ]; then
                         remote_image_tags=$(${my_curl} ${docker_registry_url}/v1/repositories/${this_image_name}/tags 2> /dev/null | ${my_jq} "." | ${my_awk} '/:/ {print $1}' | ${my_sed} -e 's/[",:]//g')
 
                         for remote_image_tag in ${remote_image_tags} ; do
 
-                            if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${stash_project}:${docker_image_tag}" ]; then
+                            if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${source_uri}:${docker_image_tag}" ]; then
                                 let remote_tag_check=${remote_tag_check}+1
                             fi
 
@@ -910,7 +810,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 done
 
                 if [ ${remote_tag_check} -eq 0 ]; then
-                    echo "Pushing updated image ${docker_namespace}/${stash_project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
+                    echo "Pushing updated image ${docker_namespace}/${source_uri}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
 
                     tag_arg=""
                     minus_f=$(${my_docker} tag --help 2> /dev/null | egrep -c "\-f,")
@@ -919,10 +819,10 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                         tag_arg="-f"
                     fi
 
-                    ${my_docker} tag ${tag_arg} ${container_id} ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} &&
-                    ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag}
+                    ${my_docker} tag ${tag_arg} ${container_id} ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag} &&
+                    ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}
                 else
-                    echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${stash_project}:${remote_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
+                    echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
                 fi
 
             fi
@@ -939,7 +839,7 @@ fi
 #
 if [ "${env_file}" != "" ]; then
 
-    for var in config docker_build_args docker_image_tag docker_namespace docker_registry docker_registry_uri git_branch personal_stash_project registry_namespace registry_tag stash_project ; do
+    for var in config docker_build_args docker_image_tag docker_namespace docker_registry docker_registry_uri git_branch registry_namespace registry_tag ; do
         eval "echo ${var}=\"\$${var}\""
     done > "${env_file}"
 

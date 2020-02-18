@@ -1,6 +1,6 @@
 [submodule "rpm-build-script"]
 	path = rpm-build-script
-	url = https://github.com/vhsjwp01/rpm-build-script.git
+	url = git@github.com:vhsjwp01/rpm-build-script.git
 [submodule "docker-tidy"]
 	path = docker-tidy
-	url = https://github.com/vhsjwp01/docker-tidy.git
+	url = git@github.com:vhsjwp01/docker-tidy.git
