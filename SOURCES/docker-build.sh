@@ -10,9 +10,9 @@
 # Revision History
 #-------------------------------------------------------------------------------
 # 20150114     Jason W. Plummer          Original: A generic script to run a 
-#                                        docker job from bamboo.  Added code
+#                                        docker job from CI/CD.  Added code
 #                                        to checkout and build a docker image
-#                                        from a Stash repo.  Can also be run
+#                                        from a source repo.  Can also be run
 #                                        standalone.
 # 20150115     Jason W. Plummer          Added code to tag and commit docker
 #                                        images both locally and remotely if
@@ -24,7 +24,7 @@
 #                                        support latest git tag detection.
 #                                        Added code to support making docker
 #                                        build log available as an artifact 
-#                                        when run from bamboo.
+#                                        when run from CI/CD.
 # 20150120     Jason W. Plummer          Added support to echo remote registry
 #                                        operations into build log
 # 20150121     Jason W. Plummer          Added --registry_namespace to allow
@@ -79,11 +79,15 @@
 #                                        back tick assignment operations.
 # 20160215     Jason W. Plummer          Fixed error introduced by modifications
 #                                        made on 20160107
-# 20160708     Jason W. Plummer          Added BITBUCKET_BASE_URI check
+# 20160708     Jason W. Plummer          Added source code base URI check
 # 20160922     Jason W. Plummer          Added $$ to temporary SRC directory
 # 20161024     Jason W. Plummer          Added catch for presence of -f switch
 #                                        in docker tag operations
 # 20170109     Jason W. Plummer          Fixed bad submodule initialization
+# 20200218     Jason W. Plummer          Changed required arguments to 
+#                                        --source_uri and --git_branch and
+#                                        refactored for more simple repo
+#                                        operations
 
 ################################################################################
 # DESCRIPTION
@@ -195,7 +199,7 @@ f__check_command() {
 
 # WHAT: Subroutine f__git_operation
 # WHY:  This subroutine performs a git operation ( passed as "${1}" ) against 
-#       the Stash project in question ( passed as "${2}" ).  All git operations 
+#       the project in question ( passed as "${2}" ).  All git operations 
 #       are performed in the following location:
 #
 #           ${GIT_CHECKOUT_BASE}/${source_uri}
@@ -209,14 +213,18 @@ f__git_operation() {
     if [ "${1}" != "" ]; then
         this_git_action="${1}"
 
+        this_project_repo="${source_uri}"
+        this_source_base_uri=$(dirname "${this_project_repo}")
+        this_project=$(basename "${this_project_repo}" | ${my_sed} -e 's|\.git$||g')
+
         case "${this_git_action}" in 
 
             branch)
 
-                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${source_uri}" != "" -a -d "${GIT_CHECKOUT_BASE}/${source_uri}" ]; then
+                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${source_uri}" != "" -a -d "${GIT_CHECKOUT_BASE}/${this_project}" ]; then
 
                     if [ "${2}" = "" ]; then
-                        cd "${GIT_CHECKOUT_BASE}/${source_uri}"
+                        cd "${GIT_CHECKOUT_BASE}/${this_project}"
                         git_branch=$(${my_git} ${this_git_action} 2> /dev/null | ${my_egrep} "^\*" | ${my_awk} '{print $NF}')
                     else
                         new_branch="${2}"
@@ -233,9 +241,6 @@ f__git_operation() {
             clone)
 
                 if [ "${GIT_CHECKOUT_BASE}" != "" -a "${2}" != "" ]; then
-                    this_project_repo="${2}"
-                    this_source_base_uri=$(dirname "${this_project_repo}")
-                    this_project=$(basename "${this_project_repo}" | ${my_sed} -e 's|\.git$||g')
 
                     if [ -d "${GIT_CHECKOUT_BASE}/${this_project}" ]; then
                         ${my_rm} -rf "${GIT_CHECKOUT_BASE}/${this_project}"
@@ -245,8 +250,8 @@ f__git_operation() {
                         ${my_mkdir} -p "${GIT_CHECKOUT_BASE}"
                     fi
          
-                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of ${this_source_base_uri}/${this_project_repo}"
-                    cd "${GIT_CHECKOUT_BASE}" && ${my_git} ${this_git_action} ${this_source_base_uri}/${this_project_repo} &&
+                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of ${this_project_repo}"
+                    cd "${GIT_CHECKOUT_BASE}" && ${my_git} ${this_git_action} ${this_project_repo} &&
 
                     # Perform a git fetch --all to grab all refs, and a git pull --all to slurp down all branches
                     cd "${GIT_CHECKOUT_BASE}/${this_project}" && ${my_git} fetch --all && ${my_git} pull --all &&
@@ -285,7 +290,7 @@ f__git_operation() {
                     fi
 
                     # See if this branch exists
-                    cd "${GIT_CHECKOUT_BASE}/${source_uri}"
+                    cd "${GIT_CHECKOUT_BASE}/${this_project}"
                     let branch_check=$(${my_git} branch -a | ${my_egrep} -c "origin/${this_branch}$")
 
                     # If ${this_branch} cannot be found then see if we were passed a tag
@@ -304,8 +309,8 @@ f__git_operation() {
                         this_branch="master"
                     fi
             
-                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of branch ${this_branch} in repo ${source_uri}"
-                    cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_git} ${this_git_action} ${this_branch}
+                    echo "${STDOUT_OFFSET}Performing git ${this_git_action} of branch ${this_branch} in repo ${GIT_CHECKOUT_BASE}/${this_project}"
+                    cd "${GIT_CHECKOUT_BASE}/${this_project}" && ${my_git} ${this_git_action} ${this_branch}
 
                     # Find our submodules and perform git checkout against them
                     submodule_files=$(${my_find} . -depth -type f -name ".gitmodules")
@@ -318,14 +323,14 @@ f__git_operation() {
 
                             # Try to checkout the branch name we were passed, otherwise fall back to the master branch for the submodule
                             for this_submodule in ${these_submodules} ; do
-                                cd "${GIT_CHECKOUT_BASE}/${source_uri}/${base_scm_dir}/${this_submodule}" && ${my_git} ${this_git_action} ${this_branch} || ${my_git} ${this_git_action} master
+                                cd "${GIT_CHECKOUT_BASE}/${this_project}/${base_scm_dir}/${this_submodule}" && ${my_git} ${this_git_action} ${this_branch} || ${my_git} ${this_git_action} master
                             done
 
                         done
 
                         # If all went well, set us back in the top level directory of the project
                         if [ ${?} -eq ${SUCCESS} ]; then
-                            cd "${GIT_CHECKOUT_BASE}/${source_uri}"
+                            cd "${GIT_CHECKOUT_BASE}/${this_project}"
                         fi
 
                     fi
@@ -339,11 +344,11 @@ f__git_operation() {
 
             rev-parse)
 
-                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${source_uri}" != "" -a -d "${GIT_CHECKOUT_BASE}/${source_uri}" -a "${2}" != "" -a "${3}" != "" ]; then
+                if [ "${GIT_CHECKOUT_BASE}" != "" -a "${source_uri}" != "" -a -d "${GIT_CHECKOUT_BASE}/${this_project}" -a "${2}" != "" -a "${3}" != "" ]; then
                     this_git_extra_args="${2}"
                     this_git_ref="${3}"
                     right_now=$(${my_date} +%Y%m%d%H%M%S)
-                    docker_image_tag=$(cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref})
+                    docker_image_tag=$(cd "${GIT_CHECKOUT_BASE}/${this_project}" && ${my_git} ${this_git_action} ${this_git_extra_args} ${this_git_ref})
                     docker_image_tag="${right_now}.${git_branch}.${docker_image_tag}"
                 else
                     err_msg="Could not complete git operation: ${this_git_action}"
@@ -510,7 +515,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             project_repo="${source_uri}.git"
         else
             project_repo="${source_uri}"
-            project=$(echo "${source_uri}" | ${my_sed} -e 's/\.git$//g')
+            project=$(basename "${source_uri}" | ${my_sed} -e 's/\.git$//g')
         fi
 
     else
@@ -554,12 +559,12 @@ fi
 if [ ${exit_code} -eq ${SUCCESS} ]; then
 
     # Setup logging
-    if [ "${bamboo_working_directory}" != "" ]; then
-        artifact_file="${bamboo_working_directory}/${source_uri}.dockerbuild.log"
-        env_file="${bamboo_working_directory}/${source_uri}.env"
+    if [ "${artifact_directory}" != "" ]; then
+        artifact_file="${artifact_directory}/${project}.dockerbuild.log"
+        env_file="${artifact_directory}/${project}.env"
     else
-        artifact_file="/tmp/${source_uri}.dockerbuild.log"
-        env_file="/tmp/${source_uri}.env"
+        artifact_file="/tmp/${project}.dockerbuild.log"
+        env_file="/tmp/${project}.env"
     fi
 
     echo "Starting build $(${my_date})" | ${my_tee} "${artifact_file}"
@@ -569,22 +574,22 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     # WHY:  Needed for image borne automation
     #
 
-    # Detect ssh pub key passed in as bamboo variable
-    if [ "${bamboo_ssh_pub_key}" != "" ]; then
-        echo "Detected SSH public key from Bamboo" | ${my_tee} -a "${artifact_file}"
-        SSH_PUB_KEY="${bamboo_ssh_pub_key}"
+    # Detect ssh pub key passed in as CI/CD variable
+    if [ "${custom_ssh_pub_key}" != "" ]; then
+        echo "Detected SSH public key from env ARGS" | ${my_tee} -a "${artifact_file}"
+        SSH_PUB_KEY="${custom_ssh_pub_key}"
     fi
 
-    # Detect ssh priv key passed in as bamboo variable
-    if [ "${bamboo_ssh_priv_key}" != "" ]; then
-        echo "Detected SSH private key from Bamboo" | ${my_tee} -a  "${artifact_file}"
-        SSH_PRIV_KEY="${bamboo_ssh_priv_key}"
+    # Detect ssh priv key passed in as CI/CD variable
+    if [ "${custom_ssh_priv_key}" != "" ]; then
+        echo "Detected SSH private key from env ARGS" | ${my_tee} -a  "${artifact_file}"
+        SSH_PRIV_KEY="${custom_ssh_priv_key}"
     fi
 
     # Pick up SSH keys and make them real
     if [ "${SSH_PUB_KEY}" != "" -a "${SSH_PRIV_KEY}" != "" ]; then
         echo "Detected SSH public and private keys from ENV" | ${my_tee} -a "${artifact_file}"
-        target_dir="${GIT_CHECKOUT_BASE}/${source_uri}/ssh"
+        target_dir="${GIT_CHECKOUT_BASE}/${project}/ssh"
 
         # Create the ssh directory if it is absent
         if [ ! -d "${target_dir}" ]; then
@@ -618,24 +623,24 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
     #    ASSUMPTIONS:
     #        (1) There is a build target named "build" which builds *AND* tags the docker image
     #        (2) There is a build target named "push" which pushes the docker image to the registry
-    if [ -e "${GIT_CHECKOUT_BASE}/${source_uri}/Makefile" ]; then
+    if [ -e "${GIT_CHECKOUT_BASE}/${project}/Makefile" ]; then
         my_make=$(which make 2> /dev/null)
 
         if [ "${my_make}" != "" ]; then
             let build_directive=$(${my_make} -qpn | ${my_egrep} "^build:" | ${my_wc} -l | ${my_awk} '{print $1}')
 
             if [ ${build_directive} -gt 0 ]; then
-                echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${source_uri}/Makefile ... see ${artifact_file} for status"
-                cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_make} build 2>&1 | ${my_tee} -a "${artifact_file}"
+                echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${project}/Makefile ... see ${artifact_file} for status"
+                cd "${GIT_CHECKOUT_BASE}/${project}" && ${my_make} build 2>&1 | ${my_tee} -a "${artifact_file}"
                 exit_code=${?}
 
                 if [ ${exit_code} -ne ${SUCCESS} ]; then
-                    err_msg="Build of Docker image ${source_uri} failed"
+                    err_msg="Build of Docker image ${project} failed"
                 else
                     container_id=$(${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}')
 
                     if [ "${container_id}" = "" ]; then
-                        err_msg="Failed to determine container id after building docker image ${source_uri}"
+                        err_msg="Failed to determine container id after building docker image ${project}"
                         exit_code=${ERROR}
                     fi
 
@@ -649,25 +654,25 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         fi
 
     # Build using a Dockerfile
-    elif [ -e "${GIT_CHECKOUT_BASE}/${source_uri}/Dockerfile" ]; then
-        echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${source_uri}/Dockerfile ... see ${artifact_file} for status"
-        cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_docker} build ${docker_build_args} . 2>&1 | ${my_tee} -a  "${artifact_file}"
+    elif [ -e "${GIT_CHECKOUT_BASE}/${project}/Dockerfile" ]; then
+        echo "Performing docker build against ${GIT_CHECKOUT_BASE}/${project}/Dockerfile ... see ${artifact_file} for status"
+        cd "${GIT_CHECKOUT_BASE}/${project}" && ${my_docker} build ${docker_build_args} . 2>&1 | ${my_tee} -a  "${artifact_file}"
         exit_code=${?}
 
         if [ ${exit_code} -ne ${SUCCESS} ]; then
-            err_msg="Build of Docker image ${source_uri} failed"
+            err_msg="Build of Docker image ${project} failed"
         else
             container_id=$(${my_tail} -1 ${artifact_file} | ${my_egrep} -i "^successfully built" | ${my_awk} '{print $NF}')
 
             if [ "${container_id}" = "" ]; then
-                err_msg="Failed to determine container id after building docker image ${source_uri}"
+                err_msg="Failed to determine container id after building docker image ${project}"
                 exit_code=${ERROR}
             fi
 
         fi
 
     else
-        err_msg="Could locate neither a Makefile nor Dockerfile in directory \"${GIT_CHECKOUT_BASE}/${source_uri}\""
+        err_msg="Could locate neither a Makefile nor Dockerfile in directory \"${GIT_CHECKOUT_BASE}/${project}\""
         exit_code=${ERROR}
     fi
 
@@ -711,13 +716,13 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
         docker_image_tag=$(echo "${docker_image_tag}" | ${my_sed} -e 's?/?\-?g')
 
         local_image_change="no"
-        let local_image_check=$(${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${source_uri}:${docker_image_tag}$")
+        let local_image_check=$(${my_docker} images | ${my_awk} '{print $1 ":" $2}' | ${my_egrep} -c "^${docker_namespace}/${project}:${docker_image_tag}$")
 
         # Only perform a local tag if the image is absent from the local registry
         if [ ${local_image_check} -eq 0 ]; then
             local_image_change="yes"
-            echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${source_uri}:${docker_image_tag}" | ${my_tee} -a "${artifact_file}"
-            ${my_docker} tag ${container_id} ${docker_namespace}/${source_uri}:${docker_image_tag}
+            echo "Tagging newly created container id ${container_id} as: ${docker_namespace}/${project}:${docker_image_tag}" | ${my_tee} -a "${artifact_file}"
+            ${my_docker} tag ${container_id} ${docker_namespace}/${project}:${docker_image_tag}
             exit_code=${?}
 
             if [ ${exit_code} -ne ${SUCCESS} ]; then
@@ -725,7 +730,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
             fi
 
         else
-            echo "Docker local image tag ${docker_namespace}/${source_uri}:${docker_image_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
+            echo "Docker local image tag ${docker_namespace}/${project}:${docker_image_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
         fi
 
     fi
@@ -743,11 +748,11 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
         if [ ${build_directive} -gt 0 ]; then
             echo "Pushing image to remote registry" | ${my_tee} -a "${artifact_file}"
-            cd "${GIT_CHECKOUT_BASE}/${source_uri}" && ${my_make} push 2>&1 | ${my_tee} -a "${artifact_file}"
+            cd "${GIT_CHECKOUT_BASE}/${project}" && ${my_make} push 2>&1 | ${my_tee} -a "${artifact_file}"
             exit_code=${?}
 
             if [ ${exit_code} -ne ${SUCCESS} ]; then
-                err_msg="Push of Docker image ${source_uri} failed"
+                err_msg="Push of Docker image ${project} failed"
             fi
 
         else
@@ -777,28 +782,28 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
 
             remote_image_change="no"
             let remote_tag_check=0
-            let remote_image_check=$(${my_curl} ${docker_registry_url}/v1/search?q=${source_uri} 2> /dev/null | ${my_jq} ".num_results")
+            let remote_image_check=$(${my_curl} ${docker_registry_url}/v1/search?q=${project} 2> /dev/null | ${my_jq} ".num_results")
 
             # Only perform a remote tag and push if the image is absent from the registry server
             if [ ${remote_image_check} -eq 0 ]; then
                 remote_image_change="yes"
-                remote_image_name="${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}"
-                echo "Adding new image ${docker_namespace}/${source_uri}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
-                ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag} &&
-                ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}
+                remote_image_name="${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag}"
+                echo "Adding new image ${docker_namespace}/${project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
+                ${my_docker} tag ${container_id} ${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag} &&
+                ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag}
             else
                 # JSON results use zero based indexing
                 let remote_image_counter=${remote_image_check}-1
 
                 while [ ${remote_image_counter} -ge 0 ]; do
-                    this_image_name=$(${my_curl} ${docker_registry_url}/v1/search?q=${source_uri} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g')
+                    this_image_name=$(${my_curl} ${docker_registry_url}/v1/search?q=${project} 2> /dev/null | ${my_jq} ".results[${remote_image_counter}].name" | ${my_sed} -e 's/"//g')
 
-                    if [ "${this_image_name}" = "${remote_namespace}/${source_uri}" ]; then
+                    if [ "${this_image_name}" = "${remote_namespace}/${project}" ]; then
                         remote_image_tags=$(${my_curl} ${docker_registry_url}/v1/repositories/${this_image_name}/tags 2> /dev/null | ${my_jq} "." | ${my_awk} '/:/ {print $1}' | ${my_sed} -e 's/[",:]//g')
 
                         for remote_image_tag in ${remote_image_tags} ; do
 
-                            if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${source_uri}:${docker_image_tag}" ]; then
+                            if [ "${this_image_name}:${remote_image_tag}" = "${remote_namespace}/${project}:${docker_image_tag}" ]; then
                                 let remote_tag_check=${remote_tag_check}+1
                             fi
 
@@ -810,7 +815,7 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                 done
 
                 if [ ${remote_tag_check} -eq 0 ]; then
-                    echo "Pushing updated image ${docker_namespace}/${source_uri}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
+                    echo "Pushing updated image ${docker_namespace}/${project}:${docker_image_tag} to remote registry as ${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag}" | ${my_tee} -a "${artifact_file}"
 
                     tag_arg=""
                     minus_f=$(${my_docker} tag --help 2> /dev/null | egrep -c "\-f,")
@@ -819,10 +824,10 @@ if [ ${exit_code} -eq ${SUCCESS} ]; then
                         tag_arg="-f"
                     fi
 
-                    ${my_docker} tag ${tag_arg} ${container_id} ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag} &&
-                    ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag}
+                    ${my_docker} tag ${tag_arg} ${container_id} ${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag} &&
+                    ${my_docker} push ${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag}
                 else
-                    echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${source_uri}:${remote_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
+                    echo "Docker remote image tag ${docker_registry_uri}/${remote_namespace}/${project}:${remote_tag} already exists ... no action taken" | ${my_tee} -a "${artifact_file}"
                 fi
 
             fi
